@@ -4,12 +4,13 @@
 
 namespace remote_call::priority {
 
-using HightestTag = ll::meta::PriorityTag<10>;
-using DefaultTag  = ll::meta::PriorityTag<5>;
-using LowTag      = ll::meta::PriorityTag<3>;
+using ll::meta::PriorityTag;
+using HightestTag = PriorityTag<10>;
+using DefaultTag  = PriorityTag<5>;
+using LowTag      = PriorityTag<3>;
 
 template <size_t P>
-constexpr auto Priority = ll::meta::PriorityTag<P>{};
+constexpr auto Priority = PriorityTag<P>{};
 
 constexpr auto Hightest = Priority<10>;
 

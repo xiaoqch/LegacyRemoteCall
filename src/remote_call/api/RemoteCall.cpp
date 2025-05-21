@@ -8,7 +8,6 @@
 #include "ll/api/service/GamingStatus.h"
 #include "remote_call/core/LegacyRemoteCall.h"
 
-
 namespace remote_call {
 
 using CallableType = CallbackFn;

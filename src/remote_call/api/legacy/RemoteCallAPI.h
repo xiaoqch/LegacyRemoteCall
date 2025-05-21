@@ -3,19 +3,21 @@
 #ifndef REMOTECALL_LEGACY_API
 
 #include <remote_call/api/RemoteCall.h>
+namespace RemoteCall = remote_call;
 
 #else
 
 #include "fmt/core.h"
 #include "ll/api/utils/SystemUtils.h"
+#include "mc/deps/core/math/Vec3.h"
 #include "mc/nbt/CompoundTag.h"
 #include "mc/world/Container.h"
 #include "mc/world/actor/player/Player.h"
 #include "mc/world/item/ItemStack.h"
-#include "mc/deps/core/math/Vec3.h"
 #include "mc/world/level/BlockPos.h"
 #include "mc/world/level/block/Block.h"
 #include "mc/world/level/block/actor/BlockActor.h"
+
 
 #define TEST_NEW_VALUE_TYPE
 
@@ -43,8 +45,8 @@ namespace RemoteCall {
 struct NbtType {
     CompoundTag const* ptr = nullptr;
     bool               own = false;
-    NbtType(std::unique_ptr<CompoundTag> tag) : ptr(tag.release()), own(true){};
-    NbtType(CompoundTag const* ptr) : ptr(ptr), own(false){};
+    NbtType(std::unique_ptr<CompoundTag> tag) : ptr(tag.release()), own(true) {};
+    NbtType(CompoundTag const* ptr) : ptr(ptr), own(false) {};
     inline std::unique_ptr<CompoundTag> tryGetUniquePtr() {
         if (!own) return {};
         own       = false;
@@ -71,8 +73,8 @@ struct NbtType {
 struct ItemType {
     ItemStack const* ptr = nullptr;
     bool             own = false;
-    ItemType(std::unique_ptr<ItemStack> tag) : ptr(tag.release()), own(true){};
-    ItemType(ItemStack const* ptr) : ptr(ptr), own(false){};
+    ItemType(std::unique_ptr<ItemStack> tag) : ptr(tag.release()), own(true) {};
+    ItemType(ItemStack const* ptr) : ptr(ptr), own(false) {};
     inline std::unique_ptr<ItemStack> tryGetUniquePtr() {
         if (!own) return {};
         own       = false;
@@ -100,7 +102,7 @@ struct BlockType {
     Block const* block;
     BlockPos     blockPos;
     int          dimension;
-    BlockType(Block* block) : block(block){};
+    BlockType(Block* block) : block(block) {};
     BlockType(Block const* ptr) : block(ptr) {
         blockPos  = BlockPos::ZERO();
         dimension = 0;
@@ -116,22 +118,22 @@ struct BlockType {
 struct NumberType {
     __int64 i = 0;
     double  f = 0;
-    NumberType(__int64 i, double f) : i(i), f(f){};
+    NumberType(__int64 i, double f) : i(i), f(f) {};
     template <typename T>
     std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, NumberType&> operator=(T v) {
         i = static_cast<__int64>(v);
         f = static_cast<double>(v);
     }
-    NumberType(double v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)){};
-    NumberType(float v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)){};
-    NumberType(__int64 v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)){};
-    NumberType(int v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)){};
-    NumberType(short v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)){};
-    NumberType(char v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)){};
-    NumberType(unsigned __int64 v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)){};
-    NumberType(unsigned int v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)){};
-    NumberType(unsigned short v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)){};
-    NumberType(unsigned char v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)){};
+    NumberType(double v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    NumberType(float v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    NumberType(__int64 v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    NumberType(int v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    NumberType(short v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    NumberType(char v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    NumberType(unsigned __int64 v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    NumberType(unsigned int v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    NumberType(unsigned short v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    NumberType(unsigned char v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
     template <typename RTN>
     inline std::enable_if_t<std::is_integral_v<RTN>, RTN> get() {
         return static_cast<RTN>(i);
@@ -145,8 +147,8 @@ struct NumberType {
 struct WorldPosType {
     Vec3 pos   = Vec3::ZERO();
     int  dimId = 3; // VanillaDimensions::Undefined;
-    WorldPosType(Vec3 const& pos, int dimId = 3) : pos(pos), dimId(dimId){};
-    WorldPosType(std::pair<Vec3, int> const& pos) : pos(pos.first), dimId(pos.second){};
+    WorldPosType(Vec3 const& pos, int dimId = 3) : pos(pos), dimId(dimId) {};
+    WorldPosType(std::pair<Vec3, int> const& pos) : pos(pos.first), dimId(pos.second) {};
     template <typename RTN>
     inline RTN get() = delete;
     template <>
@@ -170,8 +172,8 @@ struct WorldPosType {
 struct BlockPosType {
     BlockPos pos   = BlockPos::ZERO();
     int      dimId = 0;
-    BlockPosType(BlockPos const& pos, int dimId = 0) : pos(pos), dimId(dimId){};
-    BlockPosType(std::pair<BlockPos, int> const& pos) : pos(pos.first), dimId(pos.second){};
+    BlockPosType(BlockPos const& pos, int dimId = 0) : pos(pos), dimId(dimId) {};
+    BlockPosType(std::pair<BlockPos, int> const& pos) : pos(pos.first), dimId(pos.second) {};
     template <typename RTN>
     inline RTN get() = delete;
     template <>
@@ -258,15 +260,15 @@ struct ValueType {
     using ObjectType = std::unordered_map<std::string, ValueType>;
     using Type       = std::variant<Value, ArrayType, ObjectType>;
     Type value;
-    ValueType() : value({}){};
+    ValueType() : value({}) {};
     // ValueType(ValueType const& v) = delete;
     // ValueType(Value const& v) = delete;
-    ValueType(Value&& v) : value(std::move(v)){};
-    ValueType(Value v) : value(std::move(v)){};
+    ValueType(Value&& v) : value(std::move(v)) {};
+    ValueType(Value v) : value(std::move(v)) {};
     // ValueType(ValueType&& v) noexcept
     //     : value(std::move(v.value)){};
-    ValueType(std::vector<ValueType>&& v) : value(std::move(v)){};
-    ValueType(std::unordered_map<std::string, ValueType>&& v) : value(std::move(v)){};
+    ValueType(std::vector<ValueType>&& v) : value(std::move(v)) {};
+    ValueType(std::unordered_map<std::string, ValueType>&& v) : value(std::move(v)) {};
     template <typename T>
     ValueType(T const& v) : value(Value(v)){};
 };
@@ -401,12 +403,12 @@ struct ExportedFuncData {
 };
 
 __declspec(dllexport) extern CallbackFn const EMPTY_FUNC;
-__declspec(dllexport) bool exportFunc(
-    std::string const& nameSpace,
-    std::string const& funcName,
-    CallbackFn&&       callback,
-    void*              handle = ll::sys_utils::getCurrentModuleHandle()
-);
+__declspec(dllexport) bool                    exportFunc(
+                       std::string const& nameSpace,
+                       std::string const& funcName,
+                       CallbackFn&&       callback,
+                       void*              handle = ll::sys_utils::getCurrentModuleHandle()
+                   );
 __declspec(dllexport) CallbackFn const& importFunc(std::string const& nameSpace, std::string const& funcName);
 
 inline ValueType _expandArg(std::vector<ValueType>& args, int& index) { return std::move(args[--index]); }
@@ -429,8 +431,8 @@ _exportAs(std::string const& nameSpace, std::string const& funcName, std::functi
 
 __declspec(dllexport) bool hasFunc(std::string const& nameSpace, std::string const& funcName);
 __declspec(dllexport) bool removeFunc(std::string const& nameSpace, std::string const& funcName);
-__declspec(dllexport) int removeNameSpace(std::string const& nameSpace);
-__declspec(dllexport) int removeFuncs(std::vector<std::pair<std::string, std::string>>& funcs);
+__declspec(dllexport) int  removeNameSpace(std::string const& nameSpace);
+__declspec(dllexport) int  removeFuncs(std::vector<std::pair<std::string, std::string>>& funcs);
 __declspec(dllexport) void _onCallError(std::string const& msg, void* handle = ll::sys_utils::getCurrentModuleHandle());
 
 template <typename RTN, typename... Args>

@@ -8,6 +8,7 @@
 #include "mc/world/level/block/Block.h"
 #include "mc/world/level/block/actor/BlockActor.h"
 #include "remote_call/api/base/Concepts.h"
+#include "remote_call/api/base/Meta.h"
 #include "remote_call/api/conversion/detail/Detail.h"
 #include "remote_call/api/value/DynamicValue.h"
 
@@ -80,13 +81,13 @@ public:
 
 #define COMPACT_TYPE_CONVERTER(TYPE)                                                                                   \
     template <concepts::CompatibleWithCustomElement<TYPE> T>                                                           \
-        requires(!ll::concepts::IsOneOf<T, AllElementTypes>)                                                          \
-    inline ll::Expected<> toValue(DynamicValue& v, T&& t, priority::LowTag) {                                             \
+        requires(!ll::concepts::IsOneOf<T, AllElementTypes>)                                                           \
+    inline ll::Expected<> toValue(DynamicValue& v, T&& t, priority::LowTag) {                                          \
         return detail::CustomElementConverter<T, TYPE>::toValue(v, std::forward<T>(t));                                \
     }                                                                                                                  \
     template <concepts::CompatibleWithCustomElement<TYPE> T>                                                           \
-        requires(!ll::concepts::IsOneOf<T, AllElementTypes>)                                                          \
-    inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::LowTag) {                                            \
+        requires(!ll::concepts::IsOneOf<T, AllElementTypes>)                                                           \
+    inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::LowTag) {                                         \
         return detail::CustomElementConverter<T, TYPE>::fromValue(v, t);                                               \
     }
 
@@ -99,7 +100,7 @@ COMPACT_TYPE_CONVERTER(NumberType);
 // COMPACT_TYPE_CONVERTER(BlockPosType);
 // COMPACT_TYPE_CONVERTER(WorldPosType);
 
-// Actor, Player...
+// Actor*, Player*...
 template <std::convertible_to<Actor const*> T>
     requires(!concepts::IsValueElement<T>)
 inline ll::Expected<> toValue(DynamicValue& v, T&& t, priority::LowTag) {
@@ -110,7 +111,7 @@ inline ll::Expected<> toValue(DynamicValue& v, T&& t, priority::LowTag) {
 }
 template <std::convertible_to<Actor const*> T>
     requires(!concepts::IsValueElement<T>)
-inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::DefaultTag) {
+inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::LowTag) {
     if constexpr (std::convertible_to<T, Player const*>) {
         if (v.hold<Player*>()) {
             auto ptr = v.get<Player*>();
@@ -188,7 +189,7 @@ inline ll::Expected<> fromValue(DynamicValue& v, Pos& t, priority::LowTag) {
 }
 
 // T& -> T* -> remote_call::DynamicValue
-// T: Player*, BlockActor*...
+// T: Player, BlockActor...
 template <typename T>
     requires(std::is_lvalue_reference_v<T> && concepts::SupportToValue<std::add_pointer_t<std::remove_reference_t<T>>>)
 inline ll::Expected<> toValue(DynamicValue& v, T&& t, priority::LowTag) {
@@ -211,7 +212,7 @@ inline ll::Expected<> toValue(DynamicValue& v, T&& t, priority::LowTag) {
 }
 template <ll::concepts::IsOptional T>
     requires(concepts::SupportToValue<typename T::value_type>)
-inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::DefaultTag) {
+inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::LowTag) {
     if (v.hold<std::nullptr_t>()) {
         t = {};
         return {};
@@ -261,5 +262,13 @@ inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::DefaultTag) {
     }
 }
 #endif
+
+template <typename T>
+requires(std::same_as<std::decay_t<T>, Block*>)
+inline ll::Expected<> toValue(DynamicValue& v, T&& t, priority::PriorityTag<1>) {
+    // static_assert(false, "'Block*' is unsupported type, use 'Block const*' instead.");
+    v.emplace<ElementType>(const_cast<Block*>(t));
+    return {};
+}
 
 } // namespace remote_call
