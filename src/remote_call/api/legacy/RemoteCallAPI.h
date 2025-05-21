@@ -1,4 +1,11 @@
 #pragma once
+
+#ifndef REMOTECALL_LEGACY_API
+
+#include <remote_call/api/RemoteCall.h>
+
+#else
+
 #include "fmt/core.h"
 #include "ll/api/utils/SystemUtils.h"
 #include "mc/nbt/CompoundTag.h"
@@ -454,3 +461,5 @@ inline bool exportAs(std::string const& nameSpace, std::string const& funcName, 
 }
 
 } // namespace RemoteCall
+
+#endif

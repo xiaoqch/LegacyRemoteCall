@@ -3,9 +3,9 @@ add_rules("mode.debug", "mode.release")
 add_repositories("liteldev-repo https://github.com/LiteLDev/xmake-repo.git")
 
 if is_config("target_type", "server") then
-    add_requires("levilamina 1.2.0-rc.1", {configs = {target_type = "server"}})
+    add_requires("levilamina 1.2.0-rc.2", {configs = {target_type = "server"}})
 else
-    add_requires("levilamina 1.2.0-rc.1", {configs = {target_type = "client"}})
+    add_requires("levilamina 1.2.0-rc.2", {configs = {target_type = "client"}})
 end
 
 add_requires("levibuildscript")
@@ -30,8 +30,9 @@ target("LegacyRemoteCall")
     set_kind("shared")
     set_languages("c++20")
     set_symbols("debug")
-    add_files("src/**.cpp")
+    add_files("src/remote_call/**.cpp")
     add_includedirs("src")
+    add_headerfiles("src/(remote_call/api/**.h)")
     -- if is_config("target_type", "server") then
     --     add_includedirs("src-server")
     --     add_files("src-server/**.cpp")
@@ -40,11 +41,20 @@ target("LegacyRemoteCall")
     --     add_files("src-client/**.cpp")
     -- end
     after_build(function (target)
-            local bindir = path.join(os.projectdir(), "bin")
-            local includedir = path.join(bindir, "include")
-            local libdir = path.join(bindir, "lib")
-            os.mkdir(includedir)
-            os.mkdir(libdir)
-            os.cp(path.join(os.projectdir(), "src", "RemoteCallAPI.h"), includedir)
-            os.cp(path.join(target:targetdir(), target:name() .. ".lib"), libdir)
-            end)
+        function copy_headers(src_dir, dst_dir) 
+            for _, filepath in ipairs(os.files(path.join(src_dir, "**"))) do
+                if not filepath:endswith(".cpp") then
+                    local relative_path = path.relative(filepath, src_dir)
+                    local dst_path = path.join(dst_dir, relative_path)
+                    os.cp(filepath, dst_path)
+                end
+            end
+        end
+        local bindir = path.join(os.projectdir(), "bin")
+        local includedir = path.join(bindir, "include","remote_call", "api")
+        local libdir = path.join(bindir, "lib")
+        os.mkdir(includedir)
+        os.mkdir(libdir)
+        copy_headers(path.join(os.projectdir(), "src","remote_call", "api") , includedir)
+        os.cp(path.join(target:targetdir(), target:name() .. ".lib"), libdir)
+    end)

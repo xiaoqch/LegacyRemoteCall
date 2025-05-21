@@ -2,14 +2,14 @@
 
 #include "ll/api/mod/NativeMod.h"
 
-namespace legacy_remote_call_api {
+namespace remote_call {
 
-class LegacyRemoteCallAPI {
+class LegacyRemoteCall {
 
 public:
-    static LegacyRemoteCallAPI& getInstance();
+    static LegacyRemoteCall& getInstance();
 
-    LegacyRemoteCallAPI() : mSelf(*ll::mod::NativeMod::current()) {}
+    LegacyRemoteCall() : mSelf(*ll::mod::NativeMod::current()) {}
 
     [[nodiscard]] ll::mod::NativeMod& getSelf() const { return mSelf; }
 

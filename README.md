@@ -1,3 +1,3 @@
-# LegacyRemoteCallAPI
+# LegacyRemoteCall
 
 A part of LegacyScriptEngine
