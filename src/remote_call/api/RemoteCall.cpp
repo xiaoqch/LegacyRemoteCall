@@ -3,8 +3,11 @@
 #include "ll/api/Expected.h"
 #include "ll/api/io/Logger.h"
 #include "ll/api/mod/Mod.h"
+#include "ll/api/mod/ModManagerRegistry.h"
 #include "ll/api/mod/NativeMod.h"
+#include "ll/api/service/GamingStatus.h"
 #include "remote_call/core/LegacyRemoteCall.h"
+
 
 namespace remote_call {
 
@@ -20,12 +23,33 @@ std::unordered_map<std::string, remote_call::ExportedFuncData> exportedFuncs;
 
 ll::io::Logger& getLogger() { return remote_call::LegacyRemoteCall::getInstance().getSelf().getLogger(); }
 
+void clearMod(std::string_view name) {
+    for (auto iter = exportedFuncs.begin(); iter != exportedFuncs.end();) {
+        auto mod = iter->second.provider.lock();
+        if (!mod || mod->getName() == name) {
+            iter = exportedFuncs.erase(iter);
+        } else ++iter;
+    }
+}
+
+bool registerOnModUnload() {
+    auto& reg = ll::mod::ModManagerRegistry::getInstance();
+    reg.executeOnModUnload([](std::string_view name) { clearMod(name); });
+    // reg.executeOnModDisable([](std::string_view name) {
+    //     if (ll::getGamingStatus() == ll::GamingStatus::Running) {
+    //         clearMod(name);
+    //     }
+    // });
+    return true;
+}
+
 ll::Expected<> exportFunc(
     std::string const&          nameSpace,
     std::string const&          funcName,
     CallbackFn&&                callback,
     std::weak_ptr<ll::mod::Mod> mod
 ) {
+    [[maybe_unused]] static bool registered = registerOnModUnload();
     if (nameSpace.find("::") != std::string::npos) {
         return ll::makeStringError("Namespace can't includes \"::\"");
     }
