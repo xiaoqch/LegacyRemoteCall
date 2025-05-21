@@ -1,0 +1,13 @@
+{
+  "name": "lse-remote-call-test",
+  "entry": "dist/lse-remote-call-test.js",
+  "version": "0.0.1",
+  "type": "lse-nodejs",
+  "description": "RemoteCall test for LegacyScriptEngine",
+  "dependencies": [
+    {
+      "name": "legacy-script-engine-nodejs"
+    }
+  ],
+  "author": "LiteLDev"
+}
