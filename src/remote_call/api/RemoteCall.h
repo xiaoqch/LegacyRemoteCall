@@ -5,13 +5,11 @@
 #include "remote_call/api/ABI.h"
 #include "remote_call/api/base/Concepts.h"
 #include "remote_call/api/base/TypeTraits.h"
-#include "remote_call/api/reflection/Deserialization.h"
-#include "remote_call/api/reflection/Serialization.h"
 #include "remote_call/api/utils/ErrorUtils.h"
 #include "remote_call/api/value/DynamicValue.h"
 
 #include <remote_call/api/conversion/DefaultConversion.h>
-#include <remote_call/api/reflection/SerializationExt.h>
+#include <remote_call/api/conversion/DefaultStructureConversion.h>
 
 
 namespace remote_call {
@@ -47,20 +45,20 @@ struct corrected_parameter<T> {
 
 template <typename T, size_t I = 0>
     requires(corrected_parameter<T>::add_pointer)
-T unpack(DynamicValue& v, ll::Expected<>& success) {
+T unpack(DynamicValue& dv, ll::Expected<>& success) {
     std::decay_t<T>* p{};
     if (success) {
-        success = reflection::deserialize_to(v, p);
+        success = detail::fromDynamicInternal(dv, p);
         if (!success) success = error_utils::makeSerIndexError(I, success.error());
     }
     return *p;
 }
 template <typename T, size_t I = 0>
     requires(!corrected_parameter<T>::add_pointer && requires(std::decay_t<T>&& val) { [](T) {}(std::move(val)); })
-corrected_parameter<T>::hold_type unpack(DynamicValue& v, ll::Expected<>& success) {
+corrected_parameter<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& success) {
     typename corrected_parameter<T>::hold_type p{};
     if (success) {
-        success = reflection::deserialize_to(v, p);
+        success = detail::fromDynamicInternal(dv, p);
         if (!success) success = error_utils::makeSerIndexError(I, success.error());
     }
     return p;
@@ -101,7 +99,7 @@ inline ll::Expected<> exportImpl(
         } else {
             auto&&       oriRet = std::apply(callback, std::forward<decltype(paramTuple)>(paramTuple));
             DynamicValue rcRet;
-            success = reflection::serialize_to(rcRet, std::forward<decltype(oriRet)>(oriRet));
+            success = detail::toDynamicInternal(rcRet, std::forward<decltype(oriRet)>(oriRet));
             if (!success)
                 return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "ret", success.error());
             return rcRet;
@@ -125,7 +123,7 @@ inline auto importImpl(std::in_place_type_t<Ret(Args...)>, std::string const& na
         auto         paramTuple = std::forward_as_tuple(std::forward<Args>(args)...);
 
         ll::Expected<> success =
-            reflection::serialize_to<decltype(params)>(params, std::forward<decltype(paramTuple)>(paramTuple));
+            detail::toDynamicInternal<decltype(paramTuple)>(params, std::forward<decltype(paramTuple)>(paramTuple));
         if (!success)
             return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "args", success.error());
 

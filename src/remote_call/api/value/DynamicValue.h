@@ -12,9 +12,9 @@ struct DynamicValue;
 
 namespace detail {
 template <concepts::SupportToDynamic T>
-[[nodiscard]] inline ll::Expected<> toDynamicInternal(DynamicValue& v, T&& val);
+[[nodiscard]] inline ll::Expected<> toDynamicInternal(DynamicValue& dv, T&& val);
 template <concepts::SupportFromDynamic T>
-[[nodiscard]] inline ll::Expected<> fromDynamicInternal(DynamicValue& v, T& t);
+[[nodiscard]] inline ll::Expected<> fromDynamicInternal(DynamicValue& dv, T& t);
 } // namespace detail
 
 /// TODO: std::nullptr_t -> std::monostate, move to first type
@@ -203,6 +203,16 @@ struct DynamicValue : public VariantType {
     [[nodiscard]] inline operator std::string&&() && { return std::move(get<std::string>()); };
     [[nodiscard]] inline operator std::string_view() const { return get<std::string>(); };
 };
+
+template <concepts::SupportToDynamic T>
+[[nodiscard]] inline ll::Expected<> toDynamic(DynamicValue& dv, T&& val){
+    return detail::toDynamicInternal(dv, std::forward<T>(val));
+};
+template <concepts::SupportFromDynamic T>
+[[nodiscard]] inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t){
+    return detail::fromDynamicInternal(dv, t);
+};
+
 
 // NOLINTEND: google-explicit-constructor
 } // namespace remote_call

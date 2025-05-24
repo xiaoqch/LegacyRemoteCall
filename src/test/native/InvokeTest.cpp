@@ -3,6 +3,9 @@
 #include "ll/api/reflection/Reflection.h"
 #include "ll/api/thread/ServerThreadExecutor.h"
 #include "remote_call/api/RemoteCall.h"
+#include "remote_call/api/utils/ErrorUtils.h"
+
+#include <cassert>
 
 
 namespace remote_call::test {
@@ -131,7 +134,9 @@ bool                      testInvocation() {
         std::string funcName = fmt::format("testFunc{}", ++index);
         auto        res = importAs<decltype(testFunc)>(ns, funcName)(Str("a1"), Str("a2"), Str("a3"));
         assert(!res);
-        getLogger().debug(res.error().message());
+        assert(res.error().isA<error_utils::RemoteCallError>());
+        assert(res.error().as<error_utils::RemoteCallError>().reason() == error_utils::ErrorReason::NotExported);
+        // getLogger().debug(res.error().message());
     }
     {
         // args count not match
@@ -140,7 +145,9 @@ bool                      testInvocation() {
         exportAs(ns, funcName, testFunc);
         auto res = importAs<Str()>(ns, funcName)();
         assert(!res);
-        getLogger().debug(res.error().message());
+        assert(res.error().isA<error_utils::RemoteCallError>());
+        assert(res.error().as<error_utils::RemoteCallError>().reason() == error_utils::ErrorReason::ArgsCountNotMatch);
+        // getLogger().debug(res.error().message());
     }
     {
         // args type not match
@@ -149,7 +156,9 @@ bool                      testInvocation() {
         exportAs(ns, funcName, testFunc);
         auto res = importAs<Str(int)>(ns, funcName)(7);
         assert(!res);
-        getLogger().debug(res.error().message());
+        assert(res.error().isA<error_utils::RemoteCallError>());
+        assert(res.error().as<error_utils::RemoteCallError>().reason() == error_utils::ErrorReason::UnexpectedType);
+        // getLogger().debug(res.error().message());
     }
     {
         // Failed to parse DynamicValue to class BlockPos. Expected alternative struct remote_call::BlockPosType,struct
@@ -163,7 +172,9 @@ bool                      testInvocation() {
         assert(!res);
         auto msg = res.error().message();
         assert(msg.find("args[0].node.property.value.pos") != std::string::npos);
-        getLogger().debug(msg);
+        assert(res.error().isA<error_utils::RemoteCallError>());
+        assert(res.error().as<error_utils::RemoteCallError>().reason() == error_utils::ErrorReason::UnexpectedType);
+        // getLogger().debug(msg);
     }
     {
         std::string funcName = fmt::format("testFunc{}", ++index);

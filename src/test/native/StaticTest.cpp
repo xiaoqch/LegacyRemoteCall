@@ -1,10 +1,14 @@
+#include "reflection/Deserialization.h"
+#include "reflection/Serialization.h"
+#include "reflection/SerializationExt.h"
 #include "remote_call/api/RemoteCall.h"
 #include "remote_call/api/base/Concepts.h"
 #include "remote_call/api/base/Meta.h"
 #include "remote_call/api/conversion/DefaultConversion.h"
-#include "remote_call/api/reflection/Serialization.h"
-#include "remote_call/api/reflection/SerializationExt.h"
 #include "remote_call/api/value/DynamicValue.h"
+
+#include <vector>
+
 
 namespace remote_call::test {
 
@@ -50,23 +54,25 @@ static_assert(FullSupported<Container*>);
 
 static_assert(FullSupported<CompoundTag*>);
 static_assert(FullSupported<std::unique_ptr<CompoundTag>&&>);
-static_assert(FullSupported<CompoundTag*>);
 
-static_assert(requires(DynamicValue j, std::tuple<Vec3, DimensionType> v) {
-    remote_call::serializeImpl(j, v, priority::Hightest);
-    remote_call::deserializeImpl(j, v, priority::Hightest);
-    remote_call::toDynamic(j, v, ll::meta::PriorityTag<10>{});
-    remote_call::fromDynamic(j, v, priority::Hightest);
-    remote_call::detail::toDynamicInternal(j, v);
-    remote_call::detail::fromDynamicInternal(j, v);
-    remote_call::reflection::serializeImpl(j, v, priority::Hightest);
-    remote_call::reflection::deserializeImpl(j, v, priority::Hightest);
-    remote_call::reflection::serialize<decltype(j)>(v);
-    remote_call::reflection::deserialize<decltype(v)>(j);
+static_assert(FullSupported<std::vector<Vec3>>);
+static_assert(FullSupported<std::array<Vec3, 10>>);
+
+static_assert(requires(DynamicValue dv, std::tuple<Vec3, DimensionType> v) {
+    remote_call::serializeImpl(dv, v, priority::Hightest);
+    remote_call::deserializeImpl(dv, v, priority::Hightest);
+    remote_call::toDynamicImpl(dv, v, ll::meta::PriorityTag<10>{});
+    remote_call::fromDynamicImpl(dv, v, priority::Hightest);
+    remote_call::detail::toDynamicInternal(dv, v);
+    remote_call::detail::fromDynamicInternal(dv, v);
+    remote_call::reflection::serializeImpl(dv, v, priority::Hightest);
+    remote_call::reflection::deserializeImpl(dv, v, priority::Hightest);
+    remote_call::reflection::serialize<decltype(dv)>(v);
+    remote_call::reflection::deserialize<decltype(v)>(dv);
     DynamicValue{v};
-    v = j = v;
-    v = j["key"] = v;
-    v = j[4] = v;
+    v = dv = v;
+    v = dv["key"] = v;
+    v = dv[4] = v;
     remote_call::exportAs("", "", [](Actor&) {});
     remote_call::importAs<void(Player&)>("", "");
 });
@@ -86,33 +92,33 @@ static_assert(IsOptionalRef<optional_ref<Actor>>);
 
 template <IsOptionalRef T>
     requires(concepts::SupportFromDynamic<decltype(std::declval<T>().as_ptr())>)
-ll::Expected<> toDynamic1(DynamicValue& v, T&& t, priority::LowTag) {
-    if (t.has_value()) return detail::toDynamicInternal(v, std::forward<T>(t).as_ptr());
-    else v.emplace<ElementType>(NullValue);
+ll::Expected<> toDynamic1(DynamicValue& dv, T&& t, priority::LowTag) {
+    if (t.has_value()) return detail::toDynamicInternal(dv, std::forward<T>(t).as_ptr());
+    else dv.emplace<ElementType>(NullValue);
     return {};
 }
 template <IsOptionalRef T>
     requires(concepts::SupportFromDynamic<decltype(std::declval<T>().as_ptr())>)
-ll::Expected<> fromDynamic1(DynamicValue& v, T& t, priority::DefaultTag) {
-    if (v.hold<NullType>()) {
+ll::Expected<> fromDynamic1(DynamicValue& dv, T& t, priority::DefaultTag) {
+    if (dv.hold<NullType>()) {
         t = {};
         return {};
     } else {
         typename T::value_type val{};
-        ll::Expected<>         res = detail::fromDynamicInternal(v, val);
+        ll::Expected<>         res = detail::fromDynamicInternal(dv, val);
         if (res) t = val;
         return res;
     }
 }
-static_assert(requires(DynamicValue j, optional_ref<Actor>& v) {
-    toDynamic1(j, std::forward<decltype(v)>(v), priority::Hightest);
-    fromDynamic1(j, std::forward<decltype(v)>(v), priority::Hightest);
+static_assert(requires(DynamicValue dv, optional_ref<Actor>& v) {
+    toDynamic1(dv, std::forward<decltype(v)>(v), priority::Hightest);
+    fromDynamic1(dv, std::forward<decltype(v)>(v), priority::Hightest);
 });
 
 static_assert(!concepts::IsString<nullptr_t>);
 static_assert(concepts::IsTupleLike<std::tuple<>>);
-static_assert(requires(std::string& str, remote_call::DynamicValue& j) {
-    str = std::string{std::forward<remote_call::DynamicValue>(j)};
+static_assert(requires(std::string& str, remote_call::DynamicValue& dv) {
+    str = std::string{std::forward<remote_call::DynamicValue>(dv)};
 });
 
 } // namespace remote_call::test

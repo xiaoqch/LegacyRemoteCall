@@ -2,9 +2,11 @@
 
 #include "fmt/core.h"
 #include "ll/api/Expected.h"
+#include "ll/api/base/Concepts.h"
 #include "ll/api/mod/Mod.h"
 #include "ll/api/reflection/TypeName.h"
 #include "remote_call/api/ABI.h"
+#include "remote_call/api/base/Concepts.h"
 #include "remote_call/api/value/DynamicValue.h"
 
 
@@ -160,21 +162,41 @@ inline ll::Unexpected makeCallError(std::string_view ns, std::string_view func, 
     return makeUnknownError<Ret(Args...)>(ns, func, "Unknown Call Error: {}", std::move(error));
 }
 
-inline std::string_view getTypeName(DynamicValue const& v) {
-    constexpr auto getRawName = [](auto&& v) { return type_raw_name_v<std::decay_t<decltype(v)>>; };
-    if (v.hold<ElementType>()) {
-        return std::visit(getRawName, v.get<ElementType>());
+
+template <typename T>
+// requires(traits::is_variant_alternative_v<ElementType, std::decay_t<T>> ||
+// traits::is_variant_alternative_v<VariantType, std::decay_t<T>>)
+consteval std::string_view typeName() {
+    if constexpr (std::is_same_v<ObjectType, std::decay_t<T>>) {
+        return "class remote_call::ObjectType";
+    } else if constexpr (std::is_same_v<ArrayType, std::decay_t<T>>) {
+        return "class remote_call::ArrayType";
+    } else if constexpr (std::is_same_v<VariantType, std::decay_t<T>>) {
+        return "class remote_call::VariantType";
     } else {
-        return std::visit(getRawName, v);
+        return type_raw_name_v<T>;
+        // static_assert(ll::traits::always_false<T>, "Unknown type");
     }
 }
 
+inline std::string_view typeName(DynamicValue const& dv) {
+    constexpr auto getRawName = [](auto&& v) { return typeName<std::decay_t<decltype(v)>>(); };
+    if (dv.hold<ElementType>()) {
+        return std::visit(getRawName, dv.get<ElementType>());
+    } else {
+        return std::visit(getRawName, dv);
+    }
+}
+
+
 template <typename... T>
-consteval std::string_view typeListName() {
-    std::string_view res = type_raw_name_v<void(T...)>;
-    res.remove_prefix(5);
-    res.remove_suffix(1);
-    return res;
+consteval auto typeListName() {
+    if constexpr (sizeof...(T) == 0) return std::string_view{"void"};
+    if constexpr (sizeof...(T) == 1) return typeName<T...>();
+    auto list = type_raw_name_v<void(T...)>;
+    list.remove_prefix(5);
+    list.remove_suffix(1);
+    return list;
 }
 
 template <typename Target, typename... Expected>
@@ -185,7 +207,7 @@ inline ll::Unexpected makeFromDynamicTypeError(DynamicValue const& value) {
             "Failed to parse DynamicValue to {}. Expected alternative {}. Holding alternative {}.",
             type_raw_name_v<Target>,
             typeListName<Expected...>(),
-            getTypeName(value)
+            typeName(value)
         )
     );
 }

@@ -23,23 +23,25 @@
 #include "mc/world/level/Level.h"
 #include "mc/world/level/block/Block.h"
 #include "mc/world/level/block/actor/BlockActor.h"
+#include "reflection/Deserialization.h"
+#include "reflection/Serialization.h"
+#include "reflection/SerializationExt.h"
 #include "remote_call/api/RemoteCall.h"
 #include "remote_call/api/base/Meta.h"
 #include "remote_call/api/value/DynamicValue.h"
 #include "remote_call/api/value/Values.h"
-#include <string>
 
 
 // Custom Conversion Test(by adl)
 template <typename T>
     requires(std::same_as<std::decay_t<T>, DimensionType>)
-ll::Expected<> toDynamic(remote_call::DynamicValue& v, T&& t, remote_call::priority::DefaultTag) {
-    return remote_call::toDynamic(v, t.id, remote_call::priority::Hightest);
+ll::Expected<> toDynamicImpl(remote_call::DynamicValue& dv, T&& t, remote_call::priority::DefaultTag) {
+    return remote_call::toDynamicImpl(dv, t.id, remote_call::priority::Hightest);
 }
 template <typename T>
     requires(std::same_as<std::decay_t<T>, DimensionType>)
-ll::Expected<> fromDynamic(remote_call::DynamicValue& v, T& t, remote_call::priority::DefaultTag) {
-    return remote_call::fromDynamic(v, t.id, remote_call::priority::Hightest);
+ll::Expected<> fromDynamicImpl(remote_call::DynamicValue& dv, T& t, remote_call::priority::DefaultTag) {
+    return remote_call::fromDynamicImpl(dv, t.id, remote_call::priority::Hightest);
 }
 
 namespace remote_call::test {

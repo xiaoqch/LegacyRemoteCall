@@ -2,13 +2,13 @@
 // https://github.com/LiteLDev/LeviLamina/blob/18170e92c47f21a54378379c542a819533b7ab43/src/ll/api/reflection/Deserialization.h
 #pragma once
 
-#include "Reflection.h"
 #include "ll/api/Expected.h"
 #include "ll/api/base/Meta.h"
 #include "ll/api/reflection/Reflection.h"
-#include "ll/api/reflection/SerializationError.h"
 #include "remote_call/api/base/Concepts.h"
+#include "remote_call/api/reflection/Reflection.h"
 #include "remote_call/api/utils/ErrorUtils.h"
+
 
 // Priority:
 // 6. Custom deserializeImpl
@@ -101,15 +101,20 @@ inline Expected<> deserializeImpl(J& j, T& opt, ll::meta::PriorityTag<5>) {
 template <concepts::IsString T, class J>
     requires(!std::same_as<T, nullptr_t>)
 inline Expected<> deserializeImpl(J& j, T& str, ll::meta::PriorityTag<4>) {
-    if (!j.is_string()) return error_utils::makeError(error_utils::ErrorReason::UnexpectedType,"field must be a string");
+    if (!j.is_string())
+        return error_utils::makeError(error_utils::ErrorReason::UnexpectedType, "field must be a string");
     str = std::forward<J>(j);
     return {};
 }
 template <concepts::IsTupleLike T, class J>
 inline Expected<> deserializeImpl(J& j, T& tuple, ll::meta::PriorityTag<3>) {
-    if (!j.is_array()) return error_utils::makeError(error_utils::ErrorReason::UnexpectedType,"field must be an array");
+    if (!j.is_array())
+        return error_utils::makeError(error_utils::ErrorReason::UnexpectedType, "field must be an array");
     if (j.size() != std::tuple_size_v<T>)
-        return error_utils::makeError(error_utils::ErrorReason::IndexOutOfRange,fmt::format("array size must be {}", std::tuple_size_v<T>));
+        return error_utils::makeError(
+            error_utils::ErrorReason::IndexOutOfRange,
+            fmt::format("array size must be {}", std::tuple_size_v<T>)
+        );
     Expected<> res{};
 
     constexpr auto func = [](auto& ji, auto& ti, auto& res, size_t i) {
@@ -123,7 +128,8 @@ inline Expected<> deserializeImpl(J& j, T& tuple, ll::meta::PriorityTag<3>) {
 }
 template <ll::concepts::ArrayLike T, class J>
 inline Expected<> deserializeImpl(J& j, T& arr, ll::meta::PriorityTag<2>) {
-    if (!j.is_array()) return error_utils::makeError(error_utils::ErrorReason::UnexpectedType,"field must be an array");
+    if (!j.is_array())
+        return error_utils::makeError(error_utils::ErrorReason::UnexpectedType, "field must be an array");
     using value_type = typename T::value_type;
     if constexpr (requires(T a) { a.clear(); }) {
         arr.clear();
@@ -154,7 +160,7 @@ inline Expected<> deserializeImpl(J& j, T& map, ll::meta::PriorityTag<2>) {
         "the key type of the associative container must be convertible "
         "to a string"
     );
-    if (!j.is_object()) return error_utils::makeError(error_utils::ErrorReason::KeyNotFound,"field must be an object");
+    if (!j.is_object()) return error_utils::makeError(error_utils::ErrorReason::KeyNotFound, "field must be an object");
     map.clear();
     for (auto&& [k, v] : j.items()) {
         if constexpr (std::is_enum_v<typename T::key_type>) {
@@ -180,7 +186,7 @@ template <Reflectable T, class J>
 inline Expected<> deserializeImpl(J& j, T& obj, ll::meta::PriorityTag<1>) {
     Expected<> res;
     if (!j.is_object()) {
-        res = error_utils::makeError(error_utils::ErrorReason::UnexpectedType,"field must be an object");
+        res = error_utils::makeError(error_utils::ErrorReason::UnexpectedType, "field must be an object");
         return res;
     }
     reflection::forEachMember(obj, [&](std::string_view name, auto& member) {
@@ -198,7 +204,10 @@ inline Expected<> deserializeImpl(J& j, T& obj, ll::meta::PriorityTag<1>) {
             }
         } else {
             if constexpr (!ll::concepts::IsOptional<member_type>) {
-                res = error_utils::makeError(error_utils::ErrorReason::KeyNotFound,fmt::format("missing required field \"{}\" when deserializing", sname));
+                res = error_utils::makeError(
+                    error_utils::ErrorReason::KeyNotFound,
+                    fmt::format("missing required field \"{}\" when deserializing", sname)
+                );
             } else {
                 member = std::nullopt;
             }
@@ -206,6 +215,7 @@ inline Expected<> deserializeImpl(J& j, T& obj, ll::meta::PriorityTag<1>) {
     });
     return res;
 }
+
 template <ll::concepts::Require<std::is_enum> T, class J>
 inline Expected<> deserializeImpl(J& j, T& e, ll::meta::PriorityTag<1>) {
     using enum_type = std::remove_cvref_t<T>;

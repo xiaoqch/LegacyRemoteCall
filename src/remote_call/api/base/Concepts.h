@@ -31,15 +31,16 @@ concept IsDynamicValue = std::same_as<T, DynamicValue>;
 
 template <typename T>
 concept SupportToDynamicWithPrio =
-    requires(DynamicValue& v, T&& val) { toDynamic(v, std::forward<T>(val), priority::Hightest); };
+    requires(DynamicValue& dv, T&& val) { toDynamicImpl(dv, std::forward<T>(val), priority::Hightest); };
 template <typename T>
 concept SupportToDynamic =
-    SupportToDynamicWithPrio<T> || requires(DynamicValue& v, T&& val) { toDynamic(v, std::forward<T>(val)); };
+    SupportToDynamicWithPrio<T> || requires(DynamicValue& dv, T&& val) { toDynamicImpl(dv, std::forward<T>(val)); };
 
 template <typename T>
-concept SupportFromDynamicWithPrio = requires(DynamicValue& v, T& t) { fromDynamic(v, t, priority::Hightest); };
+concept SupportFromDynamicWithPrio = requires(DynamicValue& dv, T& t) { fromDynamicImpl(dv, t, priority::Hightest); };
 template <typename T>
-concept SupportFromDynamic = SupportFromDynamicWithPrio<T> || requires(DynamicValue& v, T& t) { fromDynamic(v, t); };
+concept SupportFromDynamic =
+    SupportFromDynamicWithPrio<T> || requires(DynamicValue& dv, T& t) { fromDynamicImpl(dv, t); };
 
 template <typename T>
 concept IsNormalElement =
