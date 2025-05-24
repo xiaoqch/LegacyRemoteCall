@@ -15,7 +15,7 @@ __declspec(dllexport) ll::Expected<> exportFunc(
     std::weak_ptr<ll::mod::Mod> mod = ll::mod::NativeMod::current()
 );
 __declspec(dllexport)      ll::Expected<std::reference_wrapper<CallbackFn>>
-                           importFunc(std::string_view nameSpace, std::string_view funcName);
+                           importFunc(std::string_view nameSpace, std::string_view funcName, bool includeDisabled = false);
 __declspec(dllexport) bool hasFunc(std::string_view nameSpace, std::string_view funcName, bool includeDisabled = false);
 __declspec(dllexport) std::weak_ptr<ll::mod::Mod> getProvider(std::string_view nameSpace, std::string_view funcName);
 __declspec(dllexport) bool                        removeFunc(std::string_view nameSpace, std::string_view funcName);
