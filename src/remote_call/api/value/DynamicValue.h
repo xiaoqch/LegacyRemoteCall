@@ -38,7 +38,7 @@ using ObjectType  = std::unordered_map<std::string, DynamicValue>;
 using VariantType = std::variant<ElementType, ArrayType, ObjectType>;
 
 struct DynamicValue : public VariantType {
-    DynamicValue() : VariantType(ElementType{nullptr}) {};
+    DynamicValue() : VariantType(ElementType{NullValue}) {};
     DynamicValue(const DynamicValue&)            = delete;
     DynamicValue(DynamicValue&&)                 = default;
     DynamicValue& operator=(const DynamicValue&) = delete;
@@ -60,7 +60,7 @@ struct DynamicValue : public VariantType {
     DynamicValue(T&& v) : VariantType() {
         ll::Expected<> res = detail::toValueInternal(*this, std::forward<T>(v));
         if (!res) {
-            *this = {nullptr};
+            *this = {NullValue};
             throw std::runtime_error(res.error().message());
         }
     };
@@ -151,7 +151,7 @@ struct DynamicValue : public VariantType {
     }
     [[nodiscard]] inline DynamicValue& operator[](std::string const& index) {
         if (!hold<ObjectType>()) {
-            if (hold<std::nullptr_t>()) {
+            if (hold<NullType>()) {
                 return emplace<ObjectType>()[index];
             }
             throw std::runtime_error("value not hold an object");

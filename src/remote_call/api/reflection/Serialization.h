@@ -7,6 +7,7 @@
 #include "ll/api/reflection/Reflection.h"
 #include "ll/api/reflection/SerializationError.h"
 #include "remote_call/api/base/Concepts.h"
+#include "remote_call/api/utils/ErrorUtils.h"
 
 #include <type_traits>
 
@@ -86,7 +87,7 @@ inline Expected<> serializeImpl(J& j, T&& vec, ll::meta::PriorityTag<5>)
     std::remove_cvref_t<T>::forEachComponent([&]<typename axis_type, size_t iter> {
         if (res) {
             res = serialize_to(j.emplace_back(), std::forward<T>(vec).template get<axis_type, iter>());
-            if (!res.has_value()) res = ll::reflection::makeSerIndexError(iter, res.error());
+            if (!res.has_value()) res = error_utils::makeSerIndexError(iter, res.error());
         }
     });
     return res;
@@ -123,7 +124,7 @@ inline Expected<> serializeImpl(J& j, T&& tuple, ll::meta::PriorityTag<3>)
     constexpr auto impl = [](auto& ji, auto&& ti, auto& res, size_t i) {
         if (!res) return;
         res = serialize_to(ji, std::forward<decltype(ti)>(ti));
-        if (!res) res = ll::reflection::makeSerIndexError(i, res.error());
+        if (!res) res = error_utils::makeSerIndexError(i, res.error());
     };
     (void)[&]<int... I>(std::index_sequence<I...>) {
         (void)(impl(j.emplace_back(), std::get<I>(std::forward<T>(tuple)), res, I), ...);
@@ -142,7 +143,7 @@ inline Expected<> serializeImpl(J& j, T&& arr, ll::meta::PriorityTag<2>)
         if (res) {
             res = serialize_to<J>(j.emplace_back(), std::forward<decltype((val))>(val));
             if (!res) {
-                res = ll::reflection::makeSerIndexError(iter, res.error());
+                res = error_utils::makeSerIndexError(iter, res.error());
                 break;
             }
             iter++;
@@ -170,7 +171,7 @@ inline Expected<> serializeImpl(J& j, T&& map, ll::meta::PriorityTag<2>)
         }
         res = serialize_to<J>(j[key], std::forward<decltype((v))>(v));
         if (!res) {
-            res = ll::reflection::makeSerKeyError(key, res.error());
+            res = error_utils::makeSerKeyError(key, res.error());
             break;
         }
     }
@@ -192,7 +193,7 @@ inline Expected<> serializeImpl(J& j, T&& obj, ll::meta::PriorityTag<1>)
         if constexpr (requires(member_type m) { serialize_to(j, std::forward<member_type>(m)); }) {
             res = serialize_to(j[name], std::forward<member_type>(member));
             if (!res) {
-                res = ll::reflection::makeSerMemberError(std::string{name}, res.error());
+                res = error_utils::makeSerMemberError(std::string{name}, res.error());
             }
         } else {
             static_assert(ll::traits::always_false<member_type>, "this type can't serialize");

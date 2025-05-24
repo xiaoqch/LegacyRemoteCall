@@ -1,12 +1,9 @@
-#include "RemoteCall.h"
+#include "ABI.h"
 
+#include "fmt/core.h"
 #include "ll/api/Expected.h"
-#include "ll/api/io/Logger.h"
 #include "ll/api/mod/Mod.h"
 #include "ll/api/mod/ModManagerRegistry.h"
-#include "ll/api/mod/NativeMod.h"
-#include "ll/api/service/GamingStatus.h"
-#include "remote_call/core/LegacyRemoteCall.h"
 
 namespace remote_call {
 
@@ -15,12 +12,11 @@ using CallableType = CallbackFn;
 struct ExportedFuncData {
     CallableType                callable;
     std::weak_ptr<ll::mod::Mod> provider;
+    bool                        disabled = false;
 };
 
 CallbackFn const                                               EMPTY_FUNC{};
 std::unordered_map<std::string, remote_call::ExportedFuncData> exportedFuncs;
-
-ll::io::Logger& getLogger() { return remote_call::LegacyRemoteCall::getInstance().getSelf().getLogger(); }
 
 void clearMod(std::string_view name) {
     for (auto iter = exportedFuncs.begin(); iter != exportedFuncs.end();) {
@@ -43,51 +39,52 @@ bool registerOnModUnload() {
 }
 
 ll::Expected<> exportFunc(
-    std::string const&          nameSpace,
-    std::string const&          funcName,
+    std::string_view            nameSpace,
+    std::string_view            funcName,
     CallbackFn&&                callback,
     std::weak_ptr<ll::mod::Mod> mod
 ) {
     [[maybe_unused]] static bool registered = registerOnModUnload();
     if (nameSpace.find("::") != std::string::npos) {
-        return ll::makeStringError("Namespace can't includes \"::\"");
+        return error_utils::makeError(error_utils::ErrorReason::InvalidName, "Namespace can't includes \"::\"");
     }
-    if (exportedFuncs.count(nameSpace + "::" + funcName) != 0) {
-        return ll::makeStringError(fmt::format("Fail to export! Function [{}::{}] already exists", nameSpace, funcName)
+    if (exportedFuncs.contains(fmt::format("{}::{}", nameSpace, funcName))) {
+        return error_utils::makeError(error_utils::ErrorReason::AlreadyExists,fmt::format("Fail to export! Function [{}::{}] already exists", nameSpace, funcName)
         );
     }
-    exportedFuncs.emplace(nameSpace + "::" + funcName, ExportedFuncData{std::move(callback), std::move(mod)});
+    exportedFuncs.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(fmt::format("{}::{}", nameSpace, funcName)),
+        std::forward_as_tuple(std::move(callback), std::move(mod))
+    );
     return {};
 }
 
-ll::Expected<std::reference_wrapper<CallbackFn>> importFunc(std::string const& nameSpace, std::string const& funcName) {
-    auto iter = exportedFuncs.find(nameSpace + "::" + funcName);
-    if (iter == exportedFuncs.end())
-        return ll::makeStringError(
-            fmt::format("Fail to import! Function [{}::{}] has not been exported", nameSpace, funcName)
-        );
+ll::Expected<std::reference_wrapper<CallbackFn>> importFunc(std::string_view nameSpace, std::string_view funcName) {
+    auto iter = exportedFuncs.find(fmt::format("{}::{}", nameSpace, funcName));
+    if (iter == exportedFuncs.end()) return error_utils::makeNotFoundError(nameSpace, funcName);
     return iter->second.callable;
 }
 
-bool hasFunc(std::string const& nameSpace, std::string const& funcName) {
-    return exportedFuncs.find(nameSpace + "::" + funcName) != exportedFuncs.end();
+bool hasFunc(std::string_view nameSpace, std::string_view funcName) {
+    return exportedFuncs.find(fmt::format("{}::{}", nameSpace, funcName)) != exportedFuncs.end();
 }
 
-std::weak_ptr<ll::mod::Mod> getProvider(std::string const& nameSpace, std::string const& funcName) {
-    auto iter = exportedFuncs.find(nameSpace + "::" + funcName);
+std::weak_ptr<ll::mod::Mod> getProvider(std::string_view nameSpace, std::string_view funcName) {
+    auto iter = exportedFuncs.find(fmt::format("{}::{}", nameSpace, funcName));
     if (iter == exportedFuncs.end()) return {};
     return iter->second.provider;
 }
 
 bool removeFunc(std::string&& key) { return exportedFuncs.erase(key); }
 
-bool removeFunc(std::string const& nameSpace, std::string const& funcName) {
-    return removeFunc(nameSpace + "::" + funcName);
+bool removeFunc(std::string_view nameSpace, std::string_view funcName) {
+    return removeFunc(fmt::format("{}::{}", nameSpace, funcName));
 }
 
-int removeNameSpace(std::string const& nameSpace) {
+int removeNameSpace(std::string_view nameSpace) {
     int         count  = 0;
-    std::string prefix = nameSpace + "::";
+    std::string prefix = std::string(nameSpace).append("::");
     for (auto iter = exportedFuncs.begin(); iter != exportedFuncs.end();) {
         if (nameSpace.starts_with(prefix)) {
             iter = exportedFuncs.erase(iter);

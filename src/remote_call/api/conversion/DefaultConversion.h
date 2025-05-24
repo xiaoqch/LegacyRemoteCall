@@ -7,6 +7,7 @@
 #include "mc/world/item/ItemStack.h"
 #include "mc/world/level/block/Block.h"
 #include "mc/world/level/block/actor/BlockActor.h"
+#include "remote_call/api/RemoteCall.h"
 #include "remote_call/api/base/Concepts.h"
 #include "remote_call/api/base/Meta.h"
 #include "remote_call/api/conversion/detail/Detail.h"
@@ -14,12 +15,12 @@
 
 namespace remote_call {
 
-// bool, std::string, std::nullptr_t, Player*, Actor*, BlockActor*, Container*
+// bool, std::string, NullType, Player*, Actor*, BlockActor*, Container*
 template <concepts::IsNormalElement T>
 inline ll::Expected<> toValue(DynamicValue& v, T&& t, priority::DefaultTag) {
     if constexpr (std::is_pointer_v<std::decay_t<T>>) {
         if (t == nullptr) {
-            v.emplace<ElementType>(nullptr);
+            v.emplace<ElementType>(NullValue);
             return {};
         }
     }
@@ -29,13 +30,13 @@ inline ll::Expected<> toValue(DynamicValue& v, T&& t, priority::DefaultTag) {
 template <concepts::IsNormalElement T>
 inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::DefaultTag) {
     if constexpr (std::is_pointer_v<T>) {
-        if (v.hold<std::nullptr_t>()) {
+        if (v.hold<NullType>()) {
             t = T{};
             return {};
         }
     }
     if (v.hold<T>()) t = v.get<T>();
-    else return ll::makeStringError("value type not match");
+    else return error_utils::makeFromDynamicTypeError<T, T>(v);
     return {};
 }
 
@@ -50,7 +51,7 @@ template <concepts::IsString T>
     requires(!concepts::IsValueElement<T>)
 inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::LowTag) {
     if (v.hold<std::string>()) t = std::forward<std::string>(v.get<std::string>());
-    else return ll::makeStringError("value type not match");
+    else return error_utils::makeFromDynamicTypeError<T, std::string>(v);
     return {};
 }
 
@@ -74,7 +75,7 @@ public:
     };
     static inline ll::Expected<> fromValue(DynamicValue& v, T& t) {
         if (v.hold<V>()) t = static_cast<T>(std::forward<T>(v.get<V>().template get<T>()));
-        else return ll::makeStringError("value type not match");
+        else return error_utils::makeFromDynamicTypeError<T, V>(v);
         return {};
     };
 };
@@ -120,15 +121,16 @@ inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::LowTag) {
             }
             t = reinterpret_cast<T>(ptr);
             return {};
+        } else {
+            return error_utils::makeFromDynamicTypeError<T, Player*>(v);
         }
     } else if constexpr (std::convertible_to<Actor*, T>) {
         if (v.hold<Actor*>()) t = v.get<Actor*>();
-        else return ll::makeStringError("value type not match");
+        else return error_utils::makeFromDynamicTypeError<T, Actor*>(v);
         return {};
     } else {
         static_assert(false, "Unsafety convert from value to Entity");
     }
-    return ll::makeStringError("value type not match");
 }
 
 // BlockPod, Vec3
@@ -143,13 +145,13 @@ inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::DefaultTag) {
         auto& val = v.get<BlockPosType>();
         t         = val.pos;
         return {};
-    }
-    if (v.hold<WorldPosType>()) {
+    } else if (v.hold<WorldPosType>()) {
         auto& val = v.get<WorldPosType>();
         t         = val.pos;
         return {};
+    } else {
+        return error_utils::makeFromDynamicTypeError<T, BlockPosType, WorldPosType>(v);
     }
-    return ll::makeStringError("value type not match");
 }
 
 // std::tuple<BlockPos,int>, std::pair<Vec3,int>
@@ -185,7 +187,7 @@ inline ll::Expected<> fromValue(DynamicValue& v, Pos& t, priority::LowTag) {
         std::get<1>(t) = static_cast<DimType>(val.dimId);
         return {};
     }
-    return ll::makeStringError("value type not match");
+    return error_utils::makeFromDynamicTypeError<Pos, BlockPosType, WorldPosType>(v);
 }
 
 // T& -> T* -> remote_call::DynamicValue
@@ -207,13 +209,13 @@ template <ll::concepts::IsOptional T>
     requires(concepts::SupportFromValue<typename T::value_type>)
 inline ll::Expected<> toValue(DynamicValue& v, T&& t, priority::LowTag) {
     if (t.has_value()) return detail::toValueInternal(v, *std::forward<T>(t));
-    else v.emplace<ElementType>(nullptr);
+    else v.emplace<ElementType>(NullValue);
     return {};
 }
 template <ll::concepts::IsOptional T>
     requires(concepts::SupportToValue<typename T::value_type>)
 inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::LowTag) {
-    if (v.hold<std::nullptr_t>()) {
+    if (v.hold<NullType>()) {
         t = {};
         return {};
     } else {
@@ -245,13 +247,13 @@ template <concepts::IsOptionalRef T>
     requires(concepts::SupportFromValue<decltype(std::declval<T>().as_ptr())>)
 inline ll::Expected<> toValue(DynamicValue& v, T&& t, priority::LowTag) {
     if (t.has_value()) return detail::toValueInternal(v, std::forward<T>(t).as_ptr());
-    else v.emplace<ElementType>(nullptr);
+    else v.emplace<ElementType>(NullValue);
     return {};
 }
 template <concepts::IsOptionalRef T>
     requires(concepts::SupportFromValue<decltype(std::declval<T>().as_ptr())>)
 inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::DefaultTag) {
-    if (v.hold<std::nullptr_t>()) {
+    if (v.hold<NullType>()) {
         t = {};
         return {};
     } else {
@@ -264,7 +266,7 @@ inline ll::Expected<> fromValue(DynamicValue& v, T& t, priority::DefaultTag) {
 #endif
 
 template <typename T>
-requires(std::same_as<std::decay_t<T>, Block*>)
+    requires(std::same_as<std::decay_t<T>, Block*>)
 inline ll::Expected<> toValue(DynamicValue& v, T&& t, priority::PriorityTag<1>) {
     // static_assert(false, "'Block*' is unsupported type, use 'Block const*' instead.");
     v.emplace<ElementType>(const_cast<Block*>(t));

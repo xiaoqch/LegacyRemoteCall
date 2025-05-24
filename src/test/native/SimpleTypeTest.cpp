@@ -5,6 +5,7 @@
 #include "ll/api/memory/Memory.h"
 #include "ll/api/thread/ServerThreadExecutor.h"
 #include "remote_call/api/RemoteCall.h"
+#include "remote_call/api/value/DynamicValue.h"
 
 #include <nlohmann/json.hpp>
 
@@ -76,7 +77,7 @@ struct JsonA {
     // int64_t                              i64{};
     float                                f{};
     double                               d{};
-    std::nullptr_t                       null{};
+    remote_call::NullType                null{};
     std::string                          str;
     std::vector<std::string>             list;
     std::unordered_map<std::string, int> record;
@@ -92,7 +93,7 @@ struct JsonB {
     // int64_t                              i64{};
     float                                f{};
     double                               d{};
-    std::nullptr_t                       null{};
+    remote_call::NullType                null{};
     std::string                          str;
     std::vector<std::string>             list;
     std::unordered_map<std::string, int> record;
@@ -166,7 +167,7 @@ JsonA JsonA::random() {
     // // b.i64  = dice(std::uniform_int_distribution<decltype(i64)>());
     b.f    = dice(std::uniform_real_distribution<decltype(f)>());
     b.d    = dice(std::uniform_real_distribution<decltype(d)>());
-    b.null = nullptr;
+    b.null = NullValue;
     b.str  = ll::string_utils::intToHexStr(dice(std::uniform_int_distribution()));
     auto listview =
         std::views::iota(0, dice(std::uniform_int_distribution()) % 10 + 5) | std::views::transform([&dice](auto&&) {

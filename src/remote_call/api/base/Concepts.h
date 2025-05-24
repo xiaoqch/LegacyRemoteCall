@@ -9,6 +9,7 @@ class Player;
 class Actor;
 class BlockActor;
 class Container;
+using NullType = std::nullptr_t;
 
 namespace remote_call {
 
@@ -42,7 +43,7 @@ concept SupportFromValue = SupportFromValueWithPrio<T> || requires(DynamicValue&
 
 template <typename T>
 concept IsNormalElement =
-    ll::concepts::IsOneOf<std::decay_t<T>, bool, std::string, std::nullptr_t, Player*, Actor*, BlockActor*, Container*>;
+    ll::concepts::IsOneOf<std::decay_t<T>, bool, std::string, NullType, Player*, Actor*, BlockActor*, Container*>;
 template <typename T>
 concept IsCustomElement =
     ll::concepts::IsOneOf<std::decay_t<T>, NumberType, WorldPosType, BlockPosType, ItemType, BlockType, NbtType>;

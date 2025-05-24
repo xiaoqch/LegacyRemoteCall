@@ -12,7 +12,7 @@ constexpr std::string TEST_EXPORT_NAMESPACE = "RemoteCallTest";
 inline auto& getLogger() {
     static auto logger = [] {
         auto l = ll::io::LoggerRegistry::getInstance().getOrCreate(TEST_EXPORT_NAMESPACE);
-        l->setLevel(ll::io::LogLevel::Trace);
+        l->setLevel(ll::io::LogLevel::Debug);
         return l;
     }();
     return *logger;

@@ -2,34 +2,19 @@
 
 #include "ll/api/Expected.h"
 #include "ll/api/mod/NativeMod.h"
+#include "remote_call/api/ABI.h"
 #include "remote_call/api/base/Concepts.h"
 #include "remote_call/api/base/TypeTraits.h"
 #include "remote_call/api/reflection/Deserialization.h"
 #include "remote_call/api/reflection/Serialization.h"
+#include "remote_call/api/utils/ErrorUtils.h"
 #include "remote_call/api/value/DynamicValue.h"
 
 #include <remote_call/api/conversion/DefaultConversion.h>
 #include <remote_call/api/reflection/SerializationExt.h>
 
+
 namespace remote_call {
-
-using CallbackFn = std::function<ll::Expected<DynamicValue>(std::vector<DynamicValue>&)>;
-
-__declspec(dllexport) ll::Expected<> exportFunc(
-    std::string const&          nameSpace,
-    std::string const&          funcName,
-    CallbackFn&&                callback,
-    std::weak_ptr<ll::mod::Mod> mod = ll::mod::NativeMod::current()
-);
-__declspec(dllexport)      ll::Expected<std::reference_wrapper<CallbackFn>>
-                           importFunc(std::string const& nameSpace, std::string const& funcName);
-__declspec(dllexport) bool hasFunc(std::string const& nameSpace, std::string const& funcName);
-__declspec(dllexport)      std::weak_ptr<ll::mod::Mod>
-                           getProvider(std::string const& nameSpace, std::string const& funcName);
-__declspec(dllexport) bool removeFunc(std::string const& nameSpace, std::string const& funcName);
-__declspec(dllexport) int  removeNameSpace(std::string const& nameSpace);
-__declspec(dllexport) int  removeFuncs(std::vector<std::pair<std::string, std::string>> const& funcs);
-
 
 namespace impl {
 
@@ -60,18 +45,24 @@ struct corrected_parameter<T> {
 };
 
 
-template <typename T>
+template <typename T, size_t I = 0>
     requires(corrected_parameter<T>::add_pointer)
 T unpack(DynamicValue& v, ll::Expected<>& success) {
     std::decay_t<T>* p{};
-    if (success) success = reflection::deserialize_to(v, p);
+    if (success) {
+        success = reflection::deserialize_to(v, p);
+        if (!success) success = error_utils::makeSerIndexError(I, success.error());
+    }
     return *p;
 }
-template <typename T>
+template <typename T, size_t I = 0>
     requires(!corrected_parameter<T>::add_pointer && requires(std::decay_t<T>&& val) { [](T) {}(std::move(val)); })
 corrected_parameter<T>::hold_type unpack(DynamicValue& v, ll::Expected<>& success) {
     typename corrected_parameter<T>::hold_type p{};
-    if (success) success = reflection::deserialize_to(v, p);
+    if (success) {
+        success = reflection::deserialize_to(v, p);
+        if (!success) success = error_utils::makeSerIndexError(I, success.error());
+    }
     return p;
 }
 
@@ -86,35 +77,37 @@ inline ll::Expected<> exportImpl(
     Fn&&               callback
 ) {
     /// TODO: when Ret is ll::Excepted<>
-    CallbackFn rawFunc = [callback = std::function(std::forward<decltype(callback)>(callback)
-                          )](std::vector<DynamicValue>& args) -> ll::Expected<DynamicValue> {
+    CallbackFn rawFunc = [callback = std::function(std::forward<decltype(callback)>(callback)),
+                          nameSpace,
+                          funcName](std::vector<DynamicValue>& args) -> ll::Expected<DynamicValue> {
         using LvarArgsTuple        = std::tuple<typename corrected_parameter<Args>::hold_type...>;
         constexpr size_t ArgsCount = sizeof...(Args);
         /// TODO: optional args
         if (ArgsCount != args.size()) {
-            return ll::makeStringError(
-                fmt::format("Argment count not match, requires {}, but got {}", ArgsCount, args.size())
-            );
+            return error_utils::makeArgsCountError<Ret, Args...>(nameSpace, funcName, args.size());
         }
 
         ll::Expected<> success{};
         LvarArgsTuple  paramTuple = [&]<int... I>(std::index_sequence<I...>) {
-            return std::make_tuple(unpack<Args>(args[I], success)...);
+            return std::make_tuple(unpack<Args, I>(args[I], success)...);
         }(std::index_sequence_for<Args...>{});
-        if (!success) return ll::forwardError(success.error());
+
+        if (!success)
+            return error_utils::makeDeserializeError<Ret, Args...>(nameSpace, funcName, "args", success.error());
 
         if constexpr (std::is_void_v<Ret>) {
             std::apply(callback, std::forward<decltype(paramTuple)>(paramTuple));
             return {};
         } else {
-            auto      oriRet = std::apply(callback, std::forward<decltype(paramTuple)>(paramTuple));
+            auto&&       oriRet = std::apply(callback, std::forward<decltype(paramTuple)>(paramTuple));
             DynamicValue rcRet;
             success = reflection::serialize_to(rcRet, std::forward<decltype(oriRet)>(oriRet));
-            if (!success) return ll::forwardError(success.error());
+            if (!success)
+                return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "ret", success.error());
             return rcRet;
         }
     };
-    return exportFunc(nameSpace, funcName, std::forward<CallbackFn>(rawFunc), ll::mod::NativeMod::current());
+    return exportFunc(nameSpace, funcName, std::move(rawFunc), ll::mod::NativeMod::current());
 }
 
 
@@ -125,25 +118,27 @@ inline auto importImpl(std::in_place_type_t<Ret(Args...)>, std::string const& na
     return [nameSpace, funcName](Args... args) -> ExpectedRet {
         auto res = importFunc(nameSpace, funcName);
         if (!res) {
-            return ll::makeStringError(
-                fmt::format("Fail to import! Function [{}::{}] has not been exported", nameSpace, funcName)
-            );
+            return error_utils::makeNotFoundError(nameSpace, funcName);
         }
-        auto&     rawFunc    = res->get();
+        auto&        rawFunc    = res->get();
         DynamicValue params     = DynamicValue::array();
-        auto      paramTuple = std::forward_as_tuple(std::forward<Args>(args)...);
+        auto         paramTuple = std::forward_as_tuple(std::forward<Args>(args)...);
 
         ll::Expected<> success =
             reflection::serialize_to<decltype(params)>(params, std::forward<decltype(paramTuple)>(paramTuple));
-        if (!success) return ll::forwardError(success.error());
+        if (!success)
+            return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "args", success.error());
 
         auto rcRet = rawFunc(params.get<ArrayType>());
-        if (!rcRet) return ll::forwardError(rcRet.error());
+        if (!rcRet) return error_utils::makeCallError<Ret, Args...>(nameSpace, funcName, rcRet.error());
+
         if constexpr (std::is_void_v<Ret>) return {};
         else {
-            std::remove_reference_t<Ret> ret;
-            success = reflection::deserialize_to<std::remove_reference_t<Ret>>(*rcRet, ret);
-            if (!success) return ll::forwardError(success.error());
+            auto&& ret = unpack<Ret>(*rcRet, success);
+            // std::remove_reference_t<Ret> ret;
+            // success = reflection::deserialize_to<std::remove_reference_t<Ret>>(*rcRet, ret);
+            if (!success)
+                return error_utils::makeDeserializeError<Ret, Args...>(nameSpace, funcName, "ret", success.error());
             return ret;
         }
     };

@@ -88,13 +88,13 @@ template <IsOptionalRef T>
     requires(concepts::SupportFromValue<decltype(std::declval<T>().as_ptr())>)
 ll::Expected<> toValue1(DynamicValue& v, T&& t, priority::LowTag) {
     if (t.has_value()) return detail::toValueInternal(v, std::forward<T>(t).as_ptr());
-    else v.emplace<ElementType>(nullptr);
+    else v.emplace<ElementType>(NullValue);
     return {};
 }
 template <IsOptionalRef T>
     requires(concepts::SupportFromValue<decltype(std::declval<T>().as_ptr())>)
 ll::Expected<> fromValue1(DynamicValue& v, T& t, priority::DefaultTag) {
-    if (v.hold<std::nullptr_t>()) {
+    if (v.hold<NullType>()) {
         t = {};
         return {};
     } else {
