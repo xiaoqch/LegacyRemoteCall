@@ -69,7 +69,8 @@ target("LegacyRemoteCall")
         if has_config("test") then
             local lsetestdir = path.join(bindir, "lse-remote-call-test/")
             os.mkdir(lsetestdir)
-            os.cp(path.join(os.projectdir(), "src", "test", "lse", "*.json"), lsetestdir)
+            os.cp(path.join(os.projectdir(), "src", "test", "lse", "package*.json"), lsetestdir)
+            os.cp(path.join(os.projectdir(), "src", "test", "lse", "manifest.json"), lsetestdir)
             os.cp(path.join(os.projectdir(), "src", "test", "lse", "dist"), lsetestdir)
         end
     end)

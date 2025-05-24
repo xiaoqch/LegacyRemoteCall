@@ -1,3 +1,4 @@
+import "./example.js";
 import { mkdirSync, writeFileSync } from "fs";
 const TEST_EXPORT_NAMESPACE = "RemoteCallTest";
 logger.info("Start RemoteCall Test for LegacyScriptEngine");
