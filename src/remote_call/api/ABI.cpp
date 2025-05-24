@@ -4,6 +4,7 @@
 #include "ll/api/Expected.h"
 #include "ll/api/mod/Mod.h"
 #include "ll/api/mod/ModManagerRegistry.h"
+#include "remote_call/api/utils/ErrorUtils.h"
 
 namespace remote_call {
 
@@ -27,14 +28,25 @@ void clearMod(std::string_view name) {
     }
 }
 
+void switchMod(std::string_view name, bool enable) {
+    for (auto iter = exportedFuncs.begin(); iter != exportedFuncs.end();) {
+        auto mod = iter->second.provider.lock();
+        if (!mod) {
+            iter = exportedFuncs.erase(iter);
+        } else {
+            if (mod->getName() == name) {
+                iter->second.disabled = !enable;
+            }
+            ++iter;
+        };
+    }
+}
+
 bool registerOnModUnload() {
     auto& reg = ll::mod::ModManagerRegistry::getInstance();
     reg.executeOnModUnload([](std::string_view name) { clearMod(name); });
-    // reg.executeOnModDisable([](std::string_view name) {
-    //     if (ll::getGamingStatus() == ll::GamingStatus::Running) {
-    //         clearMod(name);
-    //     }
-    // });
+    reg.executeOnModEnable([](std::string_view name) { switchMod(name, true); });
+    reg.executeOnModDisable([](std::string_view name) { switchMod(name, false); });
     return true;
 }
 
@@ -42,14 +54,16 @@ ll::Expected<> exportFunc(
     std::string_view            nameSpace,
     std::string_view            funcName,
     CallbackFn&&                callback,
-    std::weak_ptr<ll::mod::Mod> mod
+    std::weak_ptr<ll::mod::Mod> mod // NOLINT: performance-unnecessary-value-param
 ) {
     [[maybe_unused]] static bool registered = registerOnModUnload();
     if (nameSpace.find("::") != std::string::npos) {
         return error_utils::makeError(error_utils::ErrorReason::InvalidName, "Namespace can't includes \"::\"");
     }
     if (exportedFuncs.contains(fmt::format("{}::{}", nameSpace, funcName))) {
-        return error_utils::makeError(error_utils::ErrorReason::AlreadyExists,fmt::format("Fail to export! Function [{}::{}] already exists", nameSpace, funcName)
+        return error_utils::makeError(
+            error_utils::ErrorReason::AlreadyExists,
+            fmt::format("Fail to export! Function [{}::{}] already exists", nameSpace, funcName)
         );
     }
     exportedFuncs.emplace(
@@ -60,14 +74,19 @@ ll::Expected<> exportFunc(
     return {};
 }
 
-ll::Expected<std::reference_wrapper<CallbackFn>> importFunc(std::string_view nameSpace, std::string_view funcName) {
+ll::Expected<std::reference_wrapper<CallbackFn>>
+importFunc(std::string_view nameSpace, std::string_view funcName, bool includeDisabled) {
     auto iter = exportedFuncs.find(fmt::format("{}::{}", nameSpace, funcName));
     if (iter == exportedFuncs.end()) return error_utils::makeNotFoundError(nameSpace, funcName);
+    if (!includeDisabled && iter->second.disabled) return error_utils::makeDisabledError(nameSpace, funcName);
     return iter->second.callable;
 }
 
-bool hasFunc(std::string_view nameSpace, std::string_view funcName) {
-    return exportedFuncs.find(fmt::format("{}::{}", nameSpace, funcName)) != exportedFuncs.end();
+
+bool hasFunc(std::string_view nameSpace, std::string_view funcName, bool includeDisabled) {
+    auto iter = exportedFuncs.find(fmt::format("{}::{}", nameSpace, funcName));
+    if (iter == exportedFuncs.end()) return false;
+    return includeDisabled || !iter->second.disabled;
 }
 
 std::weak_ptr<ll::mod::Mod> getProvider(std::string_view nameSpace, std::string_view funcName) {

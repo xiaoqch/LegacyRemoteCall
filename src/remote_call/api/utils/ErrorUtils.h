@@ -7,6 +7,7 @@
 #include "remote_call/api/ABI.h"
 #include "remote_call/api/value/DynamicValue.h"
 
+
 namespace remote_call::error_utils {
 
 using ll::reflection::type_raw_name_v;
@@ -17,7 +18,7 @@ enum class ErrorReason {
     Unknown = 0,
     InvalidName,
     AlreadyExists,
-    FunctionNotExported,
+    NotExported,
     ProviderDisabled,
     ArgsCountNotMatch,
     UnexpectedType,
@@ -52,7 +53,7 @@ public:
     RemoteCallError& append(std::string_view ns, std::string_view func) {
         if (!mMessage.ends_with("\n")) mMessage.append("\n");
         auto  provider     = getProvider(ns, func).lock();
-        auto& providerName = provider ? provider->getName() : "Unknown Mod";
+        auto& providerName = provider ? provider->getName() : "UnknownMod";
         mMessage.append(fmt::format(
             "Function: [{}::{}](signature {}) provided by <{}>.\n",
             ns,
@@ -92,6 +93,12 @@ inline ll::Unexpected makeError(ErrorReason reason, std::string_view msg) {
     return ::nonstd::make_unexpected<ll::Error>(std::in_place, std::move(error));
 }
 
+inline ll::Unexpected makeError(std::string_view ns, std::string_view func, ErrorReason reason, std::string_view msg) {
+    auto error = std::make_unique<RemoteCallError>(reason, std::string(msg));
+    error->append(ns, func);
+    return ::nonstd::make_unexpected<ll::Error>(std::in_place, std::move(error));
+}
+
 template <typename Fn>
 inline ll::Unexpected
 makeUnknownError(std::string_view ns, std::string_view func, std::string_view msg, ll::Error&& error) {
@@ -101,12 +108,12 @@ makeUnknownError(std::string_view ns, std::string_view func, std::string_view ms
 }
 
 inline ll::Unexpected makeNotFoundError(std::string_view ns, std::string_view func) {
-    auto error = std::make_unique<RemoteCallError>(
-        ErrorReason::FunctionNotExported,
-        "Fail to import! Function has not been exported."
-    );
-    error->append(ns, func);
-    return ::nonstd::make_unexpected<ll::Error>(std::in_place, std::move(error));
+    return makeError(ns, func, ErrorReason::NotExported, "Fail to import! Function has not been exported.");
+}
+
+
+inline ll::Unexpected makeDisabledError(std::string_view ns, std::string_view func) {
+    return makeError(ns, func, ErrorReason::ProviderDisabled, "Fail to import! Provider has not been disabled.");
 }
 
 template <typename Ret, typename... Args>
