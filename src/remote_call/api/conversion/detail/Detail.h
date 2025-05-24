@@ -8,50 +8,50 @@ namespace remote_call::detail {
 using namespace remote_call::concepts;
 
 template <typename T>
-void toValue(DynamicValue&, T&&, PriorityTag<0>) = delete;
+void toDynamic(DynamicValue&, T&&, PriorityTag<0>) = delete;
 template <typename T>
-void fromValue(DynamicValue&, T&, PriorityTag<0>) = delete;
+void fromDynamic(DynamicValue&, T&, PriorityTag<0>) = delete;
 
-template <SupportToValue T>
-[[nodiscard]] inline ll::Expected<> toValueInternal(DynamicValue& v, T&& val) {
-    if constexpr (SupportToValueWithPrio<T>) {
-        using Ret = decltype(toValue(v, std::forward<T>(val), priority::Hightest));
+template <SupportToDynamic T>
+[[nodiscard]] inline ll::Expected<> toDynamicInternal(DynamicValue& v, T&& val) {
+    if constexpr (SupportToDynamicWithPrio<T>) {
+        using Ret = decltype(toDynamic(v, std::forward<T>(val), priority::Hightest));
         if constexpr (IsLeviExpected<Ret>) {
-            return toValue(v, std::forward<T>(val), priority::Hightest);
+            return toDynamic(v, std::forward<T>(val), priority::Hightest);
         } else {
-            toValue(v, std::forward<T>(val), priority::Hightest);
+            toDynamic(v, std::forward<T>(val), priority::Hightest);
             return {};
         }
-    } else if constexpr (SupportToValue<T>) {
-        using Ret = decltype(toValue(v, std::forward<T>(val)));
+    } else if constexpr (SupportToDynamic<T>) {
+        using Ret = decltype(toDynamic(v, std::forward<T>(val)));
         if constexpr (IsLeviExpected<Ret>) {
-            return toValue(v, std::forward<T>(val));
+            return toDynamic(v, std::forward<T>(val));
         } else {
-            toValue(v, std::forward<T>(val));
+            toDynamic(v, std::forward<T>(val));
             return {};
         }
-    } else static_assert(false, "Can not found toValue for type");
+    } else static_assert(false, "Can not found toDynamic for type");
 };
 
-template <SupportFromValue T>
-[[nodiscard]] inline ll::Expected<> fromValueInternal(DynamicValue& v, T& t) {
-    if constexpr (SupportFromValueWithPrio<T>) {
-        using Ret = decltype(fromValue(v, t, priority::Hightest));
+template <SupportFromDynamic T>
+[[nodiscard]] inline ll::Expected<> fromDynamicInternal(DynamicValue& v, T& t) {
+    if constexpr (SupportFromDynamicWithPrio<T>) {
+        using Ret = decltype(fromDynamic(v, t, priority::Hightest));
         if constexpr (IsLeviExpected<Ret>) {
-            return fromValue(v, t, priority::Hightest);
+            return fromDynamic(v, t, priority::Hightest);
         } else {
-            fromValue(v, t, priority::Hightest);
+            fromDynamic(v, t, priority::Hightest);
             return {};
         }
-    } else if constexpr (SupportFromValue<T>) {
-        using Ret = decltype(fromValue(v, t));
+    } else if constexpr (SupportFromDynamic<T>) {
+        using Ret = decltype(fromDynamic(v, t));
         if constexpr (IsLeviExpected<Ret>) {
-            return fromValue(v, t);
+            return fromDynamic(v, t);
         } else {
-            fromValue(v, t);
+            fromDynamic(v, t);
             return {};
         }
-    } else static_assert(false, "Can not found fromValue for type");
+    } else static_assert(false, "Can not found fromDynamic for type");
 };
 
 } // namespace remote_call::detail

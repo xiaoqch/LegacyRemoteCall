@@ -11,10 +11,10 @@ namespace remote_call {
 struct DynamicValue;
 
 namespace detail {
-template <concepts::SupportToValue T>
-[[nodiscard]] inline ll::Expected<> toValueInternal(DynamicValue& v, T&& val);
-template <concepts::SupportFromValue T>
-[[nodiscard]] inline ll::Expected<> fromValueInternal(DynamicValue& v, T& t);
+template <concepts::SupportToDynamic T>
+[[nodiscard]] inline ll::Expected<> toDynamicInternal(DynamicValue& v, T&& val);
+template <concepts::SupportFromDynamic T>
+[[nodiscard]] inline ll::Expected<> fromDynamicInternal(DynamicValue& v, T& t);
 } // namespace detail
 
 /// TODO: std::nullptr_t -> std::monostate, move to first type
@@ -55,25 +55,25 @@ struct DynamicValue : public VariantType {
     template <typename T>
         requires(requires(T&& v) { ElementType(std::forward<T>(v)); })
     DynamicValue(T&& v) : VariantType(ElementType(std::forward<T>(v))){};
-    template <concepts::SupportToValue T>
+    template <concepts::SupportToDynamic T>
         requires(!requires(T&& v) { ElementType(std::forward<T>(v)); } && !std::same_as<T, DynamicValue>)
     DynamicValue(T&& v) : VariantType() {
-        ll::Expected<> res = detail::toValueInternal(*this, std::forward<T>(v));
+        ll::Expected<> res = detail::toDynamicInternal(*this, std::forward<T>(v));
         if (!res) {
             *this = {NullValue};
             throw std::runtime_error(res.error().message());
         }
     };
-    template <concepts::SupportFromValue T>
+    template <concepts::SupportFromDynamic T>
     [[nodiscard]] inline operator T() & {
         T v;
-        detail::fromValueInternal(*this, v);
+        detail::fromDynamicInternal(*this, v);
         return std::forward<T>(v);
     }
-    template <concepts::SupportFromValue T>
+    template <concepts::SupportFromDynamic T>
     [[nodiscard]] inline operator T() && {
         T v;
-        detail::fromValueInternal(*this, v);
+        detail::fromDynamicInternal(*this, v);
         return std::forward<T>(v);
     }
 

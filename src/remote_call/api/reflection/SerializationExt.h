@@ -20,16 +20,16 @@ concept DeserializableFrom = requires(J& j, T& val) { deserialize_to(j, std::for
 } // namespace reflection
 
 // remote_call::DynamicValue -> T
-template <concepts::SupportToValue T, typename J>
+template <concepts::SupportToDynamic T, typename J>
     requires(concepts::IsDynamicValue<std::decay_t<J>>)
 inline Expected<> serializeImpl(J& j, T&& val, ll::meta::PriorityTag<6>) {
-    return remote_call::detail::toValueInternal(j, std::forward<T>(val));
+    return remote_call::detail::toDynamicInternal(j, std::forward<T>(val));
 }
 
 // T -> remote_call::DynamicValue
-template <concepts::SupportFromValue T, concepts::IsDynamicValue J>
+template <concepts::SupportFromDynamic T, concepts::IsDynamicValue J>
 inline Expected<> deserializeImpl(J& j, T& val, ll::meta::PriorityTag<6>) {
-    return detail::fromValueInternal(j, val);
+    return detail::fromDynamicInternal(j, val);
 }
 
 // Convert remote_call::DynamicValue to other Universal Type

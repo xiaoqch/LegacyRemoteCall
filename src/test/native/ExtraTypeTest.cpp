@@ -33,13 +33,13 @@
 // Custom Conversion Test(by adl)
 template <typename T>
     requires(std::same_as<std::decay_t<T>, DimensionType>)
-ll::Expected<> toValue(remote_call::DynamicValue& v, T&& t, remote_call::priority::DefaultTag) {
-    return remote_call::toValue(v, t.id, remote_call::priority::Hightest);
+ll::Expected<> toDynamic(remote_call::DynamicValue& v, T&& t, remote_call::priority::DefaultTag) {
+    return remote_call::toDynamic(v, t.id, remote_call::priority::Hightest);
 }
 template <typename T>
     requires(std::same_as<std::decay_t<T>, DimensionType>)
-ll::Expected<> fromValue(remote_call::DynamicValue& v, T& t, remote_call::priority::DefaultTag) {
-    return remote_call::fromValue(v, t.id, remote_call::priority::Hightest);
+ll::Expected<> fromDynamic(remote_call::DynamicValue& v, T& t, remote_call::priority::DefaultTag) {
+    return remote_call::fromDynamic(v, t.id, remote_call::priority::Hightest);
 }
 
 namespace remote_call::test {

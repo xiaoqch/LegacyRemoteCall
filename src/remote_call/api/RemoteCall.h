@@ -37,7 +37,7 @@ struct corrected_parameter<T> {
 
 // Player&, CompoundTag&...
 template <typename T>
-    requires(std::is_lvalue_reference_v<T> && concepts::SupportFromValue<std::add_pointer_t<std::remove_cvref_t<T>>>)
+    requires(std::is_lvalue_reference_v<T> && concepts::SupportFromDynamic<std::add_pointer_t<std::remove_cvref_t<T>>>)
 struct corrected_parameter<T> {
     using hold_type                   = T;
     using arg_type                    = T;

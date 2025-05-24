@@ -8,11 +8,11 @@
 
 namespace remote_call::test {
 
-using remote_call::concepts::SupportFromValue;
-using remote_call::concepts::SupportToValue;
+using remote_call::concepts::SupportFromDynamic;
+using remote_call::concepts::SupportToDynamic;
 
 template <typename T>
-concept FullSupported = SupportToValue<T> && SupportFromValue<T>;
+concept FullSupported = SupportToDynamic<T> && SupportFromDynamic<T>;
 
 // static_assert(FullSupported<void>);
 static_assert(FullSupported<uchar>);
@@ -55,10 +55,10 @@ static_assert(FullSupported<CompoundTag*>);
 static_assert(requires(DynamicValue j, std::tuple<Vec3, DimensionType> v) {
     remote_call::serializeImpl(j, v, priority::Hightest);
     remote_call::deserializeImpl(j, v, priority::Hightest);
-    remote_call::toValue(j, v, ll::meta::PriorityTag<10>{});
-    remote_call::fromValue(j, v, priority::Hightest);
-    remote_call::detail::toValueInternal(j, v);
-    remote_call::detail::fromValueInternal(j, v);
+    remote_call::toDynamic(j, v, ll::meta::PriorityTag<10>{});
+    remote_call::fromDynamic(j, v, priority::Hightest);
+    remote_call::detail::toDynamicInternal(j, v);
+    remote_call::detail::fromDynamicInternal(j, v);
     remote_call::reflection::serializeImpl(j, v, priority::Hightest);
     remote_call::reflection::deserializeImpl(j, v, priority::Hightest);
     remote_call::reflection::serialize<decltype(j)>(v);
@@ -85,28 +85,28 @@ static_assert(IsOptionalRef<optional_ref<Actor>>);
 
 
 template <IsOptionalRef T>
-    requires(concepts::SupportFromValue<decltype(std::declval<T>().as_ptr())>)
-ll::Expected<> toValue1(DynamicValue& v, T&& t, priority::LowTag) {
-    if (t.has_value()) return detail::toValueInternal(v, std::forward<T>(t).as_ptr());
+    requires(concepts::SupportFromDynamic<decltype(std::declval<T>().as_ptr())>)
+ll::Expected<> toDynamic1(DynamicValue& v, T&& t, priority::LowTag) {
+    if (t.has_value()) return detail::toDynamicInternal(v, std::forward<T>(t).as_ptr());
     else v.emplace<ElementType>(NullValue);
     return {};
 }
 template <IsOptionalRef T>
-    requires(concepts::SupportFromValue<decltype(std::declval<T>().as_ptr())>)
-ll::Expected<> fromValue1(DynamicValue& v, T& t, priority::DefaultTag) {
+    requires(concepts::SupportFromDynamic<decltype(std::declval<T>().as_ptr())>)
+ll::Expected<> fromDynamic1(DynamicValue& v, T& t, priority::DefaultTag) {
     if (v.hold<NullType>()) {
         t = {};
         return {};
     } else {
         typename T::value_type val{};
-        ll::Expected<>         res = detail::fromValueInternal(v, val);
+        ll::Expected<>         res = detail::fromDynamicInternal(v, val);
         if (res) t = val;
         return res;
     }
 }
 static_assert(requires(DynamicValue j, optional_ref<Actor>& v) {
-    toValue1(j, std::forward<decltype(v)>(v), priority::Hightest);
-    fromValue1(j, std::forward<decltype(v)>(v), priority::Hightest);
+    toDynamic1(j, std::forward<decltype(v)>(v), priority::Hightest);
+    fromDynamic1(j, std::forward<decltype(v)>(v), priority::Hightest);
 });
 
 static_assert(!concepts::IsString<nullptr_t>);
