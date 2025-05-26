@@ -9,19 +9,19 @@
 #include "mc/world/level/block/actor/BlockActor.h"
 #include "remote_call/api/base/Concepts.h"
 #include "remote_call/api/base/Meta.h"
-#include "remote_call/api/conversion/detail/Detail.h"
+#include "remote_call/api/conversions/detail/Detail.h"
 #include "remote_call/api/utils/ErrorUtils.h"
+#include "remote_call/api/value/Base.h"
 #include "remote_call/api/value/DynamicValue.h"
 
-
-namespace remote_call {
+namespace remote_call::detail {
 
 // bool, std::string, NullType, Player*, Actor*, BlockActor*, Container*
 template <concepts::IsNormalElement T>
-inline ll::Expected<> toDynamicImpl(DynamicValue& dv, T&& t, priority::HightTag) {
+inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::HightTag) {
     if constexpr (std::is_pointer_v<std::decay_t<T>>) {
         if (t == nullptr) {
-            dv.emplace<ElementType>(NullValue);
+            dv.emplace<ElementType>(NULL_VALUE);
             return {};
         }
     }
@@ -29,7 +29,7 @@ inline ll::Expected<> toDynamicImpl(DynamicValue& dv, T&& t, priority::HightTag)
     return {};
 }
 template <concepts::IsNormalElement T>
-inline ll::Expected<> fromDynamicImpl(DynamicValue& dv, T& t, priority::HightTag) {
+inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
     if constexpr (std::is_pointer_v<T>) {
         if (dv.hold<NullType>()) {
             t = T{};
@@ -44,37 +44,40 @@ inline ll::Expected<> fromDynamicImpl(DynamicValue& dv, T& t, priority::HightTag
 // String like
 template <concepts::IsString T>
     requires(!concepts::IsValueElement<T>)
-inline ll::Expected<> toDynamicImpl(DynamicValue& dv, T&& t, priority::LowTag) {
+inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::LowTag) {
     dv.emplace<ElementType>(std::string{std::forward<T>(t)});
     return {};
 }
 template <concepts::IsString T>
     requires(!concepts::IsValueElement<T>)
-inline ll::Expected<> fromDynamicImpl(DynamicValue& dv, T& t, priority::LowTag) {
-    if (dv.hold<std::string>()) t = std::forward<std::string>(dv.get<std::string>());
+inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::LowTag) {
+    if (dv.hold<std::string>()) t = std::forward<DynamicValue>(dv).get<std::string>();
     else return error_utils::makeFromDynamicTypeError<T, std::string>(dv);
     return {};
 }
 
 namespace detail {
 
-template <typename T, concepts::IsCustomElement V>
-    requires(concepts::CompatibleWithCustomElement<T, V>)
+template <typename NativeType, concepts::IsCustomElement V>
+    requires(concepts::CompatibleWithCustomElement<NativeType, V>)
 struct CustomElementConverter {
 public:
-    static inline ll::Expected<> toDynamicImpl(DynamicValue& dv, T&& t)
-        requires(!IsUniquePtr<std::remove_reference_t<T>>)
+    template <typename T = NativeType>
+    static inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t)
+        requires(!IsUniquePtr<std::decay_t<T>>)
     {
         dv.emplace<ElementType>(V(std::forward<T>(t)));
         return {};
     };
-    static inline ll::Expected<> toDynamicImpl(DynamicValue& dv, T& t)
-        requires(IsUniquePtr<std::remove_reference_t<T>>)
+    template <typename T = NativeType>
+    static inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t)
+        requires(IsUniquePtr<std::decay_t<T>>)
     {
-        dv.emplace<ElementType>(V(std::forward<T>(t).get()));
+        dv.emplace<ElementType>(V(std::forward<T>(t)));
         return {};
     };
-    static inline ll::Expected<> fromDynamicImpl(DynamicValue& dv, T& t) {
+    template <typename T = NativeType>
+    static inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t) {
         if (dv.hold<V>()) t = static_cast<T>(std::forward<T>(dv.get<V>().template get<T>()));
         else return error_utils::makeFromDynamicTypeError<T, V>(dv);
         return {};
@@ -84,13 +87,13 @@ public:
 #define COMPACT_TYPE_CONVERTER(TYPE)                                                                                   \
     template <concepts::CompatibleWithCustomElement<TYPE> T>                                                           \
         requires(!ll::concepts::IsOneOf<T, AllElementTypes>)                                                           \
-    inline ll::Expected<> toDynamicImpl(DynamicValue& dv, T&& t, priority::DefaultTag) {                               \
-        return detail::CustomElementConverter<T, TYPE>::toDynamicImpl(dv, std::forward<T>(t));                         \
+    inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::DefaultTag) {                                   \
+        return detail::CustomElementConverter<std::decay_t<T>, TYPE>::toDynamic(dv, std::forward<T>(t));               \
     }                                                                                                                  \
     template <concepts::CompatibleWithCustomElement<TYPE> T>                                                           \
         requires(!ll::concepts::IsOneOf<T, AllElementTypes>)                                                           \
-    inline ll::Expected<> fromDynamicImpl(DynamicValue& dv, T& t, priority::DefaultTag) {                              \
-        return detail::CustomElementConverter<T, TYPE>::fromDynamicImpl(dv, t);                                        \
+    inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::DefaultTag) {                                  \
+        return detail::CustomElementConverter<std::decay_t<T>, TYPE>::fromDynamic(dv, t);                              \
     }
 
 } // namespace detail
@@ -105,16 +108,17 @@ COMPACT_TYPE_CONVERTER(NumberType);
 // Actor*, Player*...
 template <std::convertible_to<Actor const*> T>
     requires(!concepts::IsValueElement<T>)
-inline ll::Expected<> toDynamicImpl(DynamicValue& dv, T&& t, priority::DefaultTag) {
+inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::DefaultTag) {
     if constexpr (!std::convertible_to<T, Player const*>)
         dv.template emplace<ElementType>(const_cast<Actor*>(static_cast<Actor const*>(std::forward<decltype(t)>(t))));
     else
         dv.template emplace<ElementType>(const_cast<Player*>(static_cast<Player const*>(std::forward<decltype(t)>(t))));
     return {};
 }
+
 template <std::convertible_to<Actor const*> T>
     requires(!concepts::IsValueElement<T>)
-inline ll::Expected<> fromDynamicImpl(DynamicValue& dv, T& t, priority::DefaultTag) {
+inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::DefaultTag) {
     if constexpr (std::convertible_to<T, Player const*>) {
         if (dv.hold<Player*>()) {
             auto ptr = dv.get<Player*>();
@@ -137,15 +141,15 @@ inline ll::Expected<> fromDynamicImpl(DynamicValue& dv, T& t, priority::DefaultT
 
 // BlockPod, Vec3
 template <concepts::IsPos T>
-inline ll::Expected<> toDynamicImpl(DynamicValue& dv, T&& t, priority::HightTag) {
+inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::HightTag) {
     dv.emplace<ElementType>(std::forward<T>(t));
     return {};
 }
 template <concepts::IsPos T>
-inline ll::Expected<> fromDynamicImpl(DynamicValue& dv, T& t, priority::HightTag) {
+inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
     if (dv.hold<BlockPosType>()) {
-        auto& val = dv.get<BlockPosType>();
-        t         = val.pos;
+        auto&& val = std::move(dv).get<BlockPosType>();
+        t          = val.pos;
         return {};
     } else if (dv.hold<WorldPosType>()) {
         auto& val = dv.get<WorldPosType>();
@@ -162,7 +166,7 @@ template <concepts::IsTupleLike Pos>
         { std::get<0>(pos) } -> concepts::IsPos;
         { std::get<1>(pos) } -> std::convertible_to<int>;
     } )
-inline ll::Expected<> toDynamicImpl(DynamicValue& dv, Pos&& t, priority::DefaultTag) {
+inline ll::Expected<> toDynamic(DynamicValue& dv, Pos&& t, priority::DefaultTag) {
     using PosType = decltype(std::get<0>(std::forward<Pos>(t)));
     dv.emplace<ElementType>(std::pair<std::decay_t<PosType>, int>{
         std::get<0>(std::forward<Pos>(t)),
@@ -175,7 +179,7 @@ template <typename Pos>
         { std::get<0>(pos) } -> concepts::IsPos;
         { std::get<1>(pos) } -> std::convertible_to<int>;
     } )
-inline ll::Expected<> fromDynamicImpl(DynamicValue& dv, Pos& t, priority::DefaultTag) {
+inline ll::Expected<> fromDynamic(DynamicValue& dv, Pos& t, priority::DefaultTag) {
     using DimType = decltype(std::get<1>(std::forward<Pos>(t)));
     if (dv.hold<BlockPosType>()) {
         auto& val      = dv.get<BlockPosType>();
@@ -196,23 +200,23 @@ inline ll::Expected<> fromDynamicImpl(DynamicValue& dv, Pos& t, priority::Defaul
 // T: Player, BlockActor...
 template <typename T>
     requires(std::is_lvalue_reference_v<T> && concepts::SupportToDynamic<std::add_pointer_t<std::remove_reference_t<T>>>)
-inline ll::Expected<> toDynamicImpl(DynamicValue& dv, T&& t, priority::LowTag) {
-    return detail::toDynamicInternal(dv, std::forward<std::add_pointer_t<std::remove_reference_t<T>>>(&t));
+inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::LowTag) {
+    return ::remote_call::toDynamic(dv, std::forward<std::add_pointer_t<std::remove_reference_t<T>>>(&t));
 }
 
 // template <typename T>
 //     requires(std::is_lvalue_reference_v<T> &&
 //     concepts::SupportFromDynamic<std::add_pointer_t<std::remove_reference_t<T>>>)
-// inline ll::Expected<> fromDynamicImpl(DynamicValue& dv, T& t, priority::HightTag) {
-//     return detail::fromDynamicInternal(dv, std::forward<std::add_pointer_t<std::remove_reference_t<T>>>(&t));
+// inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
+//     return ::remote_call::fromDynamic(dv, std::forward<std::add_pointer_t<std::remove_reference_t<T>>>(&t));
 // }
 
 template <typename T>
     requires(std::same_as<std::decay_t<T>, Block*>)
-inline ll::Expected<> toDynamicImpl(DynamicValue& dv, T&& t, priority::PriorityTag<1>) {
+inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::PriorityTag<1>) {
     // static_assert(false, "'Block*' is unsupported type, use 'Block const*' instead.");
     dv.emplace<ElementType>(const_cast<Block*>(t));
     return {};
 }
 
-} // namespace remote_call
+} // namespace remote_call::detail

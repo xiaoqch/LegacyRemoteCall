@@ -161,3 +161,4 @@ ll.exports(
   TEST_EXPORT_NAMESPACE,
   "lseTestExtra"
 );
+import "./example.js";

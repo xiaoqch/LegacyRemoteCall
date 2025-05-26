@@ -1,3 +1,7 @@
+#include "test/native/Test.h"
+
+/** Example */
+
 #include "ll/api/Expected.h"
 #include "ll/api/event/EventBus.h"
 #include "ll/api/event/server/ServerStartedEvent.h"
@@ -22,80 +26,80 @@
 #include "mc/world/level/block/BlockLegacy.h"
 #include "mc/world/level/block/registry/BlockTypeRegistry.h"
 #include "remote_call/api/RemoteCall.h"
-#include "remote_call/api/base/Meta.h"
-#include "remote_call/api/value/DynamicValue.h"
-#include "test/native/Test.h"
 
 // Custom conversions
+
+// element type
 inline ll::Expected<>
-fromDynamicImpl(remote_call::DynamicValue& dv, Bedrock::Safety::RedactableString& rs, remote_call::priority::HightTag) {
-    std::string str{};
-    auto        res = remote_call::fromDynamic(dv, str);
-    if (res) rs.append(str);
-    return res;
-}
-inline ll::Expected<>
-fromDynamicImpl(remote_call::DynamicValue& dv, ItemInstance& ii, remote_call::priority::HightTag) {
-    ItemStack* is;
-    auto       res = remote_call::fromDynamic(dv, is);
-    if (res) ii = ItemInstance(*is);
-    return res;
+fromDynamic(remote_call::DynamicValue& dv, Bedrock::Safety::RedactableString& rs, remote_call::priority::HightTag) {
+    if (!dv.hold<std::string>())
+        return remote_call::error_utils::makeFromDynamicTypeError<Bedrock::Safety::RedactableString, std::string>(dv);
+    rs.append(dv.get<std::string>());
+    return {};
 }
 
-inline ll::Expected<>
-fromDynamicImpl(remote_call::DynamicValue& dv, HashedString& hs, remote_call::priority::HightTag) {
-    std::string str{};
-    auto        res = remote_call::fromDynamic(dv, str);
-    if (res) void(hs = HashedString(std::move(str)));
-    return res;
+// tryGet
+inline ll::Expected<> fromDynamic(remote_call::DynamicValue& dv, ItemInstance& ii, remote_call::priority::HightTag) {
+    return dv.tryGet<ItemStack*>().transform([&](auto&& is) { ii = ItemInstance(*is); });
 }
-struct MyType {
+
+// getTo
+inline ll::Expected<> fromDynamic(remote_call::DynamicValue& dv, HashedString& hs, remote_call::priority::HightTag) {
+    hs.clear();
+    return dv.getTo(hs.mStr).transform([&]() {
+        hs.mStrHash = HashedString::computeHash(hs.mStr);
+        return;
+    });
+}
+struct TempRecipesType {
     std::string id;
     std::string flag;
     explicit    operator Recipes::Type() const {
-        /// TODO: not implemented
         auto  item       = ll::service::getLevel()->getItemRegistry().lookupByName("minecraft:stone");
         auto& block      = BlockTypeRegistry::lookupByName("minecraft:stone")->mDefaultState;
         auto  ingredient = RecipeIngredient("minecraft:stone", 1, 0);
         return {item.get(), block, ingredient, flag.at(0)};
     }
 };
-// TODO: without default constructor
-template <std::same_as<Recipes::Type> Ret>
-inline ll::Expected<Ret> fromDynamicImpl(remote_call::DynamicValue& dv, remote_call::priority::HightTag) {
-    MyType type{};
-    auto   res = remote_call::fromDynamic(dv, type);
-    if (res) return static_cast<Recipes::Type>(type);
-    return res;
-}
 
+// Without default constructor
+inline ll::Expected<Recipes::Type>
+fromDynamic(remote_call::DynamicValue& dv, std::in_place_type_t<Recipes::Type>, remote_call::priority::HightTag) {
+    return dv.tryGet<TempRecipesType>().transform([](auto&& type) {
+        return static_cast<Recipes::Type>(std::forward<decltype(type)>(type));
+    });
+    // Or:
+    // TempRecipesType tmp{};
+    // return dv.getTo(tmp).transform([&]() { return static_cast<Recipes::Type>(tmp); });
+}
 // Function
-bool addShapeRecipe(
+auto addShapeRecipe(
     ::std::string const&                 recipeId,
     ::ItemInstance const&                result,
     ::std::vector<::std::string> const&  rows,
-    ::std::vector<MyType> const&         myTypes,
+    ::std::vector<Recipes::Type> const&  types,
     ::std::vector<::HashedString> const& tags,
     int                                  priority,
     // ::RecipeUnlockingRequirement const&   unlockingReq,
     // ::SemVersion const&                   formatVersion,
     bool assumeSymmetry
 ) {
-    auto& recipes = ll::service::getLevel()->getRecipes();
-    auto  view    = myTypes | std::views::transform([](auto&& t) { return static_cast<Recipes::Type>(t); });
+    // auto& recipes2 = ll::service::getLevel()->getRecipes();
+    auto&                      recipes = ll::service::getLevel()->getRecipes();
+    SemVersion                 ver;
+    RecipeUnlockingRequirement req;
     try {
-        recipes.addShapedRecipe(
-            recipeId,
-            result,
-            rows,
-            std::vector<Recipes::Type>(view.begin(), view.end()),
-            tags,
-            priority,
-            nullptr,
-            RecipeUnlockingRequirement(),
-            SemVersion(),
-            assumeSymmetry
-        );
+        recipes.addShapedRecipe(recipeId, result, rows, types, tags, priority, {}, req, ver, assumeSymmetry);
+
+        HashedString key{recipeId};
+        auto&        map = *recipes.mRecipes;
+        for (auto& tag : tags) {
+            if (!map.contains(tag) || !map[tag].contains(key)) {
+                return false;
+            }
+        }
+        if (ll::service::getLevel()->getPlayerList().size() > 0)
+            CraftingDataPacket::prepareFromRecipes(recipes, true)->sendToClients();
         return true;
     } catch (...) {
         ll::makeExceptionError().error().log(remote_call::test::getLogger());
@@ -107,11 +111,13 @@ bool addShapeRecipe(
 
 ll::Expected<> exportApi() {
     ll::Expected<> res;
-    if (res) res = remote_call::exportAs("RecipesReg", "addShapeRecipe", addShapeRecipe);
-    if (!res) res.error().log(remote_call::test::getLogger());
+    if (res) res = remote_call::exportAs("RecipesApi", "addShapeRecipe", addShapeRecipe);
     return res;
 }
 
-auto started = ll::event::EventBus::getInstance().emplaceListener<ll::event::ServerStartedEvent>([](auto&&) {
-    (void)exportApi();
+auto listener = ll::event::EventBus::getInstance().emplaceListener<ll::event::ServerStartedEvent>([](auto&&) {
+    exportApi().or_else([](auto&& error) {
+        error.log(remote_call::test::getLogger());
+        return ll::Expected<>{};
+    });
 });

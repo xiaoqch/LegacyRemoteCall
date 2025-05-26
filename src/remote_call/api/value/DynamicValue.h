@@ -3,49 +3,46 @@
 #include "Values.h"
 #include "ll/api/Expected.h"
 #include "ll/api/base/Concepts.h"
+#include "mc/deps/core/utility/optional_ref.h"
+#include "remote_call/api/base/Concepts.h"
 #include "remote_call/api/base/TypeTraits.h"
+#include "remote_call/api/conversions/AdlSerializer.h"
+#include "remote_call/api/conversions/detail/Detail.h"
+#include "remote_call/api/value/Base.h"
+
+#include <string_view>
+#include <type_traits>
+
 
 namespace remote_call {
 // NOLINTBEGIN: google-explicit-constructor
 
-struct DynamicValue;
+namespace error_utils {
+template <typename Target, typename... Expected>
+inline ll::Unexpected makeFromDynamicTypeError(DynamicValue const& value);
+}
 
-namespace detail {
-template <concepts::SupportToDynamic T>
-[[nodiscard]] inline ll::Expected<> toDynamicInternal(DynamicValue& dv, T&& val);
-template <concepts::SupportFromDynamic T>
-[[nodiscard]] inline ll::Expected<> fromDynamicInternal(DynamicValue& dv, T& t);
-} // namespace detail
 
-/// TODO: std::nullptr_t -> std::monostate, move to first type
-#if false
-#define AllElementTypes                                                                                                \
-    std::monostate, bool, std::string, NumberType, Player*, Actor*, BlockActor*, Container*, WorldPosType,             \
-        BlockPosType, ItemType, BlockType, NbtType
-using NullType = std::monostate;
-#else
-#define ExtraType                                                                                                      \
-    std::nullptr_t, NumberType, Player*, Actor*, BlockActor*, Container*, WorldPosType, BlockPosType, ItemType,        \
-        BlockType, NbtType
-#define AllElementTypes bool, std::string, ExtraType
-using NullType = std::nullptr_t;
-#endif
-constexpr NullType NullValue = NullType{};
+using detail::ElementType;
+using detail::NULL_VALUE;
+using detail::NullType;
+using ObjectType  = detail::ObjectTypeBase<DynamicValue>;
+using ArrayType   = detail::ArrayTypeBase<DynamicValue>;
+using VariantType = detail::VariantTypeBase<DynamicValue>;
+template <typename T>
+concept IsAnyDynamicElement = ll::concepts::IsOneOf<T, AllElementTypes, ElementType, ObjectType, ArrayType>;
 
-using ElementType = std::variant<AllElementTypes>;
-using ArrayType   = std::vector<DynamicValue>;
-using ObjectType  = std::unordered_map<std::string, DynamicValue>;
-using VariantType = std::variant<ElementType, ArrayType, ObjectType>;
+struct DynamicValue : public detail::DynamicBase<DynamicValue> {
+    using BaseType = detail::DynamicBase<DynamicValue>;
 
-struct DynamicValue : public VariantType {
-    DynamicValue() : VariantType(ElementType{NullValue}) {};
+    DynamicValue() : BaseType(ElementType{NULL_VALUE}) {};
     DynamicValue(const DynamicValue&)            = delete;
     DynamicValue(DynamicValue&&)                 = default;
     DynamicValue& operator=(const DynamicValue&) = delete;
     DynamicValue& operator=(DynamicValue&&)      = default;
     template <typename T>
         requires(!std::is_reference_v<T> && traits::is_variant_alternative_v<VariantType, T>)
-    explicit DynamicValue(T&& v) : VariantType(std::forward<T>(v)){};
+    explicit DynamicValue(T&& v) : BaseType(std::forward<T>(v)){};
     template <typename T>
         requires(!std::is_reference_v<T> && traits::is_variant_alternative_v<VariantType, T>)
     DynamicValue& operator=(T&& v) {
@@ -54,33 +51,33 @@ struct DynamicValue : public VariantType {
     }
     template <typename T>
         requires(requires(T&& v) { ElementType(std::forward<T>(v)); })
-    DynamicValue(T&& v) : VariantType(ElementType(std::forward<T>(v))){};
+    DynamicValue(T&& v) : BaseType(ElementType(std::forward<T>(v))){};
     template <concepts::SupportToDynamic T>
         requires(!requires(T&& v) { ElementType(std::forward<T>(v)); } && !std::same_as<T, DynamicValue>)
-    DynamicValue(T&& v) : VariantType() {
-        ll::Expected<> res = detail::toDynamicInternal(*this, std::forward<T>(v));
+    DynamicValue(T&& v) : BaseType() {
+        ll::Expected<> res = ::remote_call::toDynamic(*this, std::forward<T>(v));
         if (!res) {
-            *this = {NullValue};
+            *this = {NULL_VALUE};
             throw std::runtime_error(res.error().message());
         }
     };
-    template <concepts::SupportFromDynamic T>
-    [[nodiscard]] inline operator T() & {
-        T v;
-        detail::fromDynamicInternal(*this, v);
-        return std::forward<T>(v);
-    }
-    template <concepts::SupportFromDynamic T>
-    [[nodiscard]] inline operator T() && {
-        T v;
-        detail::fromDynamicInternal(*this, v);
-        return std::forward<T>(v);
-    }
+    // template <concepts::SupportFromDynamic T>
+    // [[nodiscard]] inline operator T() & {
+    //     T v;
+    //     ::remote_call::fromDynamic(*this, v);
+    //     return std::forward<T>(v);
+    // }
+    // template <concepts::SupportFromDynamic T>
+    // [[nodiscard]] inline operator T() && {
+    //     T v;
+    //     ::remote_call::fromDynamic(*this, v);
+    //     return std::forward<T>(v);
+    // }
 
     static inline DynamicValue object() { return DynamicValue{ObjectType{}}; }
     static inline DynamicValue array() { return DynamicValue{ArrayType{}}; }
 
-    template <ll::concepts::IsOneOf<AllElementTypes, ElementType, ObjectType, ArrayType> T>
+    template <IsAnyDynamicElement T>
     [[nodiscard]] inline bool hold() const noexcept {
         if constexpr (ll::concepts::IsOneOf<T, AllElementTypes>) {
             return hold<ElementType>() && std::holds_alternative<T>(std::get<ElementType>(*this));
@@ -88,7 +85,7 @@ struct DynamicValue : public VariantType {
             return std::holds_alternative<T>(*this);
         }
     }
-    template <ll::concepts::IsOneOf<AllElementTypes, ElementType, ObjectType, ArrayType> T>
+    template <IsAnyDynamicElement T>
     [[nodiscard]] inline T const& get() const& {
         if constexpr (ll::concepts::IsOneOf<T, AllElementTypes>) {
             return std::get<T>(std::get<ElementType>(*this));
@@ -96,7 +93,7 @@ struct DynamicValue : public VariantType {
             return std::get<T>(*this);
         }
     }
-    template <ll::concepts::IsOneOf<AllElementTypes, ElementType, ObjectType, ArrayType> T>
+    template <IsAnyDynamicElement T>
     [[nodiscard]] inline T& get() & {
         if constexpr (ll::concepts::IsOneOf<T, AllElementTypes>) {
             return std::get<T>(std::get<ElementType>(*this));
@@ -104,7 +101,7 @@ struct DynamicValue : public VariantType {
             return std::get<T>(*this);
         }
     }
-    template <ll::concepts::IsOneOf<AllElementTypes, ElementType, ObjectType, ArrayType> T>
+    template <IsAnyDynamicElement T>
     [[nodiscard]] inline T&& get() && {
         if constexpr (ll::concepts::IsOneOf<T, AllElementTypes>) {
             return std::get<T>(std::get<ElementType>(std::move(*this)));
@@ -112,15 +109,78 @@ struct DynamicValue : public VariantType {
             return std::get<T>(std::move(*this));
         }
     }
-    template <ll::concepts::IsOneOf<AllElementTypes, ElementType, ObjectType, ArrayType> T>
-    [[nodiscard]] inline optional_ref<T> tryGet() noexcept {
-        if (!hold<T>()) return {};
-        if constexpr (ll::concepts::IsOneOf<T, AllElementTypes>) {
-            return std::get<T>(std::get<ElementType>(*this));
-        } else {
-            return std::get<T>(*this);
+
+    template <IsAnyDynamicElement T>
+    [[nodiscard]] inline ll::Expected<> getTo(T& out) {
+        if constexpr (std::is_pointer_v<T>) {
+            if (is_null()) {
+                out = T{};
+                return {};
+            };
         }
+        if (!hold<T>()) return error_utils::makeFromDynamicTypeError<T, T>(*this);
+        out = get<T>();
+        return {};
     }
+    template <concepts::SupportFromDynamic T>
+        requires(!IsAnyDynamicElement<T> && concepts::SupportFromDynamicC<T>)
+    [[nodiscard]] inline ll::Expected<> getTo(T& out) {
+        auto res = AdlSerializer<T>::fromDynamic(*this);
+        if (!res) return ll::forwardError(res.error());
+        out = std::move(res).value();
+        return {};
+    }
+    template <concepts::SupportFromDynamic T>
+        requires(!IsAnyDynamicElement<T> && !concepts::SupportFromDynamicC<T> && concepts::SupportFromDynamicR<T>)
+    [[nodiscard]] inline ll::Expected<> getTo(T& out) {
+        return AdlSerializer<T>::fromDynamic(*this, out);
+    }
+
+    template <concepts::SupportFromDynamic T>
+        requires(concepts::SupportFromDynamicC<T>)
+    [[nodiscard]] inline ll::Expected<T> tryGet() {
+        return AdlSerializer<T>::fromDynamic(*this);
+    }
+    template <concepts::SupportFromDynamic T>
+        requires(!concepts::SupportFromDynamicC<T>)
+    [[nodiscard]] inline ll::Expected<T> tryGet() {
+        T    v{};
+        auto result = AdlSerializer<T>::fromDynamic(*this, v);
+        if (result) return v;
+        else return ll::forwardError(result.error());
+    }
+    template <concepts::SupportFromDynamic T>
+        requires(concepts::SupportFromDynamicC<T>)
+    [[nodiscard]] inline std::optional<T> tryGet(ll::Expected<>& success) {
+        auto result = tryGet<T>();
+        if (result) return *std::move(result);
+        success = ll::forwardError(result.error());
+        return {};
+    }
+    template <concepts::SupportFromDynamic T>
+        requires(!concepts::SupportFromDynamicC<T>)
+    [[nodiscard]] inline std::optional<T> tryGet(ll::Expected<>& success) {
+        T v{};
+        if (success) success = getTo(v);
+        if (success) return v;
+        return {};
+    }
+    template <typename T>
+        requires(std::is_lvalue_reference_v<T> && concepts::SupportFromDynamic<std::remove_reference_t<T>*>)
+    [[nodiscard]] inline optional_ref<std::remove_reference_t<T>> tryGet(ll::Expected<>& success) {
+        std::remove_reference_t<T>* ptr{};
+        if (success) success = getTo(ptr);
+        if (success) return ptr;
+        return {};
+    }
+    template <typename T>
+    [[nodiscard]] inline static ll::Expected<DynamicValue> from(T&& v) {
+        ll::Expected<DynamicValue> dv{NULL_VALUE};
+        auto                       res = AdlSerializer<std::decay_t<T>>::toDynamic(dv.value(), std::forward<T>(v));
+        if (!res) dv = ll::forwardError(res.error());
+        return dv;
+    }
+
     [[nodiscard]] inline bool is_array() const noexcept { return hold<ArrayType>(); }
     [[nodiscard]] inline bool is_boolean() const noexcept { return hold<bool>(); }
     [[nodiscard]] inline bool is_null() const noexcept { return hold<nullptr_t>(); }
@@ -162,7 +222,7 @@ struct DynamicValue : public VariantType {
     [[nodiscard]] inline DynamicValue& operator[](std::string_view index) { return (*this)[std::string{index}]; }
     template <size_t N>
     [[nodiscard]] inline DynamicValue& operator[](const char (&index)[N]) {
-        return (*this)[std::string{index, N}];
+        return (*this)[std::string_view{index, N}];
     }
     [[nodiscard]] inline auto const& items() const {
         if (!hold<ObjectType>()) {
@@ -203,16 +263,6 @@ struct DynamicValue : public VariantType {
     [[nodiscard]] inline operator std::string&&() && { return std::move(get<std::string>()); };
     [[nodiscard]] inline operator std::string_view() const { return get<std::string>(); };
 };
-
-template <concepts::SupportToDynamic T>
-[[nodiscard]] inline ll::Expected<> toDynamic(DynamicValue& dv, T&& val){
-    return detail::toDynamicInternal(dv, std::forward<T>(val));
-};
-template <concepts::SupportFromDynamic T>
-[[nodiscard]] inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t){
-    return detail::fromDynamicInternal(dv, t);
-};
-
 
 // NOLINTEND: google-explicit-constructor
 } // namespace remote_call

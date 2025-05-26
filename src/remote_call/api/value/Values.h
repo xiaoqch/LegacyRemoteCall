@@ -33,7 +33,8 @@ struct MayUniquePointerType {
         o.own = false;
         return *this;
     };
-    MayUniquePointerType(std::unique_ptr<T> tag) : ptr(tag.release()), own(true) {};
+    MayUniquePointerType(std::unique_ptr<T>&& tag) : ptr(tag.release()), own(true) {};
+    MayUniquePointerType(std::unique_ptr<T> const& tag) : ptr(tag.get()), own(false) {};
     MayUniquePointerType(T const* ptr) : ptr(ptr), own(false) {};
     ~MayUniquePointerType() {
         if (own && ptr) delete ptr;
@@ -64,8 +65,8 @@ struct MayUniquePointerType {
     };
 };
 
-struct NbtType : MayUniquePointerType<CompoundTag> {};
-struct ItemType : MayUniquePointerType<ItemStack> {};
+struct NbtType : public MayUniquePointerType<CompoundTag> {};
+struct ItemType : public MayUniquePointerType<ItemStack> {};
 
 struct BlockType {
     Block const* block;

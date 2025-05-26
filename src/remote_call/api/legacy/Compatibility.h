@@ -18,7 +18,7 @@ __declspec(dllexport) CallbackFn const& importFunc(std::string const& nameSpace,
 __declspec(dllexport) bool hasFunc(std::string const& nameSpace, std::string const& funcName);
 __declspec(dllexport) bool removeFunc(std::string const& nameSpace, std::string const& funcName);
 __declspec(dllexport) int  removeNameSpace(std::string const& nameSpace);
-__declspec(dllexport) int  removeFuncs(std::vector<std::pair<std::string, std::string>>& funcs); /// FIXME: const
+__declspec(dllexport) int  removeFuncs(std::vector<std::pair<std::string, std::string>>& funcs);
 __declspec(dllexport) void _onCallError(std::string const& msg, void* handle = ll::sys_utils::getCurrentModuleHandle());
 
 } // namespace RemoteCall

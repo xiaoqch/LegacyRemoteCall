@@ -5,11 +5,13 @@
 #include "remote_call/api/ABI.h"
 #include "remote_call/api/base/Concepts.h"
 #include "remote_call/api/base/TypeTraits.h"
+#include "remote_call/api/conversions/AdlSerializer.h"
+#include "remote_call/api/conversions/detail/Detail.h"
 #include "remote_call/api/utils/ErrorUtils.h"
 #include "remote_call/api/value/DynamicValue.h"
 
-#include <remote_call/api/conversion/DefaultConversion.h>
-#include <remote_call/api/conversion/DefaultStructureConversion.h>
+#include <remote_call/api/conversions/DefaultContainerConversion.h>
+#include <remote_call/api/conversions/DefaultConversion.h>
 
 
 namespace remote_call {
@@ -48,7 +50,7 @@ template <typename T, size_t I = 0>
 T unpack(DynamicValue& dv, ll::Expected<>& success) {
     std::decay_t<T>* p{};
     if (success) {
-        success = detail::fromDynamicInternal(dv, p);
+        success = fromDynamic(dv, p);
         if (!success) success = error_utils::makeSerIndexError(I, success.error());
     }
     return *p;
@@ -58,7 +60,7 @@ template <typename T, size_t I = 0>
 corrected_parameter<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& success) {
     typename corrected_parameter<T>::hold_type p{};
     if (success) {
-        success = detail::fromDynamicInternal(dv, p);
+        success = fromDynamic(dv, p);
         if (!success) success = error_utils::makeSerIndexError(I, success.error());
     }
     return p;
@@ -86,23 +88,27 @@ inline ll::Expected<> exportImpl(
         }
 
         ll::Expected<> success{};
-        LvarArgsTuple  paramTuple = [&]<int... I>(std::index_sequence<I...>) {
+        LvarArgsTuple  paramsHolder = [&]<int... I>(std::index_sequence<I...>) {
             return std::make_tuple(unpack<Args, I>(args[I], success)...);
         }(std::index_sequence_for<Args...>{});
-
         if (!success)
             return error_utils::makeDeserializeError<Ret, Args...>(nameSpace, funcName, "args", success.error());
 
+        // Maybe unnecessary
+        std::tuple<Args&&...> paramsRef = [&]<int... I>(std::index_sequence<I...>) {
+            return std::forward_as_tuple(static_cast<Args&&>(std::get<I>(paramsHolder))...);
+        }(std::index_sequence_for<Args...>{});
+
         if constexpr (std::is_void_v<Ret>) {
-            std::apply(callback, std::forward<decltype(paramTuple)>(paramTuple));
+            std::apply(callback, std::forward<decltype(paramsRef)>(paramsRef));
             return {};
         } else {
-            auto&&       oriRet = std::apply(callback, std::forward<decltype(paramTuple)>(paramTuple));
-            DynamicValue rcRet;
-            success = detail::toDynamicInternal(rcRet, std::forward<decltype(oriRet)>(oriRet));
+            auto         nativeRet = std::apply(callback, std::forward<decltype(paramsRef)>(paramsRef));
+            DynamicValue dynRet;
+            success = ::remote_call::toDynamic(dynRet, std::forward<decltype(nativeRet)>(nativeRet));
             if (!success)
                 return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "ret", success.error());
-            return rcRet;
+            return dynRet;
         }
     };
     return exportFunc(nameSpace, funcName, std::move(rawFunc), ll::mod::NativeMod::current());
@@ -122,22 +128,21 @@ inline auto importImpl(std::in_place_type_t<Ret(Args...)>, std::string const& na
         DynamicValue params     = DynamicValue::array();
         auto         paramTuple = std::forward_as_tuple(std::forward<Args>(args)...);
 
-        ll::Expected<> success =
-            detail::toDynamicInternal<decltype(paramTuple)>(params, std::forward<decltype(paramTuple)>(paramTuple));
+        ll::Expected<> success = toDynamic(params, std::forward<decltype(paramTuple)>(paramTuple));
         if (!success)
             return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "args", success.error());
 
-        auto rcRet = rawFunc(params.get<ArrayType>());
-        if (!rcRet) return error_utils::makeCallError<Ret, Args...>(nameSpace, funcName, rcRet.error());
+        auto dynRet = rawFunc(params.get<ArrayType>());
+        if (!dynRet) return error_utils::makeCallError<Ret, Args...>(nameSpace, funcName, dynRet.error());
 
         if constexpr (std::is_void_v<Ret>) return {};
         else {
-            auto&& ret = unpack<Ret>(*rcRet, success);
+            auto nativeRet = dynRet->tryGet<Ret>(success);
             // std::remove_reference_t<Ret> ret;
             // success = reflection::deserialize_to<std::remove_reference_t<Ret>>(*rcRet, ret);
             if (!success)
                 return error_utils::makeDeserializeError<Ret, Args...>(nameSpace, funcName, "ret", success.error());
-            return ret;
+            return *std::move(nativeRet);
         }
     };
 }

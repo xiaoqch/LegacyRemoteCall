@@ -1,6 +1,5 @@
 
 #include "Test.h"
-#include "fmt/core.h"
 #include "ll/api/Expected.h"
 #include "ll/api/base/Containers.h"
 #include "ll/api/chrono/GameChrono.h"
@@ -23,25 +22,19 @@
 #include "mc/world/level/Level.h"
 #include "mc/world/level/block/Block.h"
 #include "mc/world/level/block/actor/BlockActor.h"
-#include "reflection/Deserialization.h"
-#include "reflection/Serialization.h"
-#include "reflection/SerializationExt.h"
 #include "remote_call/api/RemoteCall.h"
-#include "remote_call/api/base/Meta.h"
-#include "remote_call/api/value/DynamicValue.h"
-#include "remote_call/api/value/Values.h"
 
 
 // Custom Conversion Test(by adl)
 template <typename T>
     requires(std::same_as<std::decay_t<T>, DimensionType>)
-ll::Expected<> toDynamicImpl(remote_call::DynamicValue& dv, T&& t, remote_call::priority::DefaultTag) {
-    return remote_call::toDynamicImpl(dv, t.id, remote_call::priority::Hightest);
+ll::Expected<> toDynamic(remote_call::DynamicValue& dv, T&& t, remote_call::priority::DefaultTag) {
+    return remote_call::toDynamic(dv, t.id);
 }
 template <typename T>
     requires(std::same_as<std::decay_t<T>, DimensionType>)
-ll::Expected<> fromDynamicImpl(remote_call::DynamicValue& dv, T& t, remote_call::priority::DefaultTag) {
-    return remote_call::fromDynamicImpl(dv, t.id, remote_call::priority::Hightest);
+ll::Expected<> fromDynamic(remote_call::DynamicValue& dv, T& t, remote_call::priority::DefaultTag) {
+    return remote_call::fromDynamic(dv, t.id);
 }
 
 namespace remote_call::test {
@@ -56,7 +49,7 @@ struct BlockInfoJson {
 
     bool operator==(BlockInfoJson const&) const = default;
 };
-/// TODO:
+
 struct ExtraJson {
     Vec3                                pos;
     BlockPos                            bpos;
@@ -214,9 +207,9 @@ constexpr auto& ns = TEST_EXPORT_NAMESPACE;
 bool            testRandomExtraType() {
     // random test
     auto const random = ExtraEx::random();
-    auto       value  = remote_call::reflection::serialize<remote_call::DynamicValue>(random.clone());
+    auto       value  = DynamicValue::from(random.clone());
     if (!value) throw std::runtime_error(value.error().message());
-    auto result = remote_call::reflection::deserialize<ExtraEx>(*value);
+    auto result = value->tryGet<ExtraEx>();
     if (!result) throw std::runtime_error(result.error().message());
     assert(random == *result);
     return true;

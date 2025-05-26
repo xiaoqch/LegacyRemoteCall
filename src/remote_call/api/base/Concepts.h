@@ -1,9 +1,9 @@
 #pragma once
 
-#include "Meta.h"
 #include "ll/api/base/Concepts.h"
 #include "ll/api/base/Meta.h"
 #include "mc/world/level/BlockPos.h"
+#include "remote_call/api/value/Base.h"
 
 class Player;
 class Actor;
@@ -28,19 +28,6 @@ using ll::meta::PriorityTag;
 
 template <typename T>
 concept IsDynamicValue = std::same_as<T, DynamicValue>;
-
-template <typename T>
-concept SupportToDynamicWithPrio =
-    requires(DynamicValue& dv, T&& val) { toDynamicImpl(dv, std::forward<T>(val), priority::Hightest); };
-template <typename T>
-concept SupportToDynamic =
-    SupportToDynamicWithPrio<T> || requires(DynamicValue& dv, T&& val) { toDynamicImpl(dv, std::forward<T>(val)); };
-
-template <typename T>
-concept SupportFromDynamicWithPrio = requires(DynamicValue& dv, T& t) { fromDynamicImpl(dv, t, priority::Hightest); };
-template <typename T>
-concept SupportFromDynamic =
-    SupportFromDynamicWithPrio<T> || requires(DynamicValue& dv, T& t) { fromDynamicImpl(dv, t); };
 
 template <typename T>
 concept IsNormalElement =

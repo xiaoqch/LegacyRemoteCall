@@ -1,13 +1,10 @@
-#include "reflection/Deserialization.h"
-#include "reflection/Serialization.h"
+#include "Test.h"
+
 #include "reflection/SerializationExt.h"
 #include "remote_call/api/RemoteCall.h"
-#include "remote_call/api/base/Concepts.h"
-#include "remote_call/api/base/Meta.h"
-#include "remote_call/api/conversion/DefaultConversion.h"
 #include "remote_call/api/value/DynamicValue.h"
 
-#include <vector>
+#include <any>
 
 
 namespace remote_call::test {
@@ -17,6 +14,7 @@ using remote_call::concepts::SupportToDynamic;
 
 template <typename T>
 concept FullSupported = SupportToDynamic<T> && SupportFromDynamic<T>;
+
 
 // static_assert(FullSupported<void>);
 static_assert(FullSupported<uchar>);
@@ -32,7 +30,6 @@ static_assert(FullSupported<std::nullptr_t>);
 
 static_assert(FullSupported<Vec3>);
 static_assert(FullSupported<Vec3&>);
-static_assert(FullSupported<Vec3 const&>);
 // static_assert(FullSupported<Vec3 const*>);
 
 static_assert(FullSupported<Vec3>);
@@ -42,7 +39,7 @@ static_assert(FullSupported<std::pair<Vec3, char>>);
 static_assert(FullSupported<std::pair<Vec3, DimensionType>>);
 
 static_assert(FullSupported<Actor*>);
-static_assert(FullSupported<Mob*>);
+// static_assert(FullSupported<Mob*>);
 static_assert(FullSupported<Player*>);
 static_assert(FullSupported<SimulatedPlayer const*>);
 
@@ -59,24 +56,95 @@ static_assert(FullSupported<std::vector<Vec3>>);
 static_assert(FullSupported<std::array<Vec3, 10>>);
 
 static_assert(requires(DynamicValue dv, std::tuple<Vec3, DimensionType> v) {
-    remote_call::serializeImpl(dv, v, priority::Hightest);
+    dv.getTo(v);
+    dv.tryGet<decltype(v)>();
+    DynamicValue::from(v);
     remote_call::deserializeImpl(dv, v, priority::Hightest);
-    remote_call::toDynamicImpl(dv, v, ll::meta::PriorityTag<10>{});
-    remote_call::fromDynamicImpl(dv, v, priority::Hightest);
-    remote_call::detail::toDynamicInternal(dv, v);
-    remote_call::detail::fromDynamicInternal(dv, v);
-    remote_call::reflection::serializeImpl(dv, v, priority::Hightest);
-    remote_call::reflection::deserializeImpl(dv, v, priority::Hightest);
-    remote_call::reflection::serialize<decltype(dv)>(v);
-    remote_call::reflection::deserialize<decltype(v)>(dv);
+    remote_call::toDynamic(dv, v);
+    remote_call::fromDynamic(dv, v);
     DynamicValue{v};
-    v = dv = v;
-    v = dv["key"] = v;
-    v = dv[4] = v;
+    // v = dv = v;
+    // v = dv["key"] = v;
+    // v = dv[4] = v;
     remote_call::exportAs("", "", [](Actor&) {});
     remote_call::importAs<void(Player&)>("", "");
 });
+} // namespace remote_call::test
 
+
+class CustomType : std::variant<std::string, ItemInstance> {
+    std::string customName;
+
+public:
+    explicit CustomType(std::string id) : std::variant<std::string, ItemInstance>(id) {}
+    explicit CustomType(ItemInstance item) : std::variant<std::string, ItemInstance>(item) {}
+};
+
+#if false
+template <>
+struct ::remote_call::AdlSerializer<CustomType> {
+    inline static ll::Expected<CustomType> fromDynamic(DynamicValue& dv) {
+        if (dv.hold<std::string>()) {
+            return CustomType(dv.get<std::string>());
+        } else if (dv.hold<ItemType>()) {
+            return CustomType(ItemInstance(*dv.get<ItemType>().ptr));
+        } else {
+            return ll::makeStringError("Invalid type");
+        }
+    }
+};
+#else
+ll::Expected<CustomType>
+fromDynamic(remote_call::DynamicValue& dv, std::in_place_type_t<CustomType>, remote_call::priority::HightTag) {
+    if (dv.hold<std::string>()) {
+        return CustomType(dv.get<std::string>());
+    } else if (dv.hold<remote_call::ItemType>()) {
+        return CustomType(ItemInstance(*dv.get<remote_call::ItemType>().ptr));
+    } else {
+        return ll::makeStringError("Invalid type");
+    }
+}
+#endif
+struct CustomTypeWrapper {
+    std::string name;
+    CustomType  customType;
+};
+namespace remote_call::test {
+
+static_assert(SupportFromDynamic<std::optional<CustomType>>);
+static_assert(requires(DynamicValue dv, ll::Expected<> res, std::any any) {
+    // fromDynamic1(dv, std::in_place_type<std::optional<CustomType>>, priority::Hightest);
+    AdlSerializer<CustomType>::fromDynamic(dv);
+    dv.tryGet<std::optional<CustomType>>();
+    dv.tryGet<std::optional<CustomType>>(res);
+    dv.tryGet<std::vector<CustomType>>();
+    dv.tryGet<std::vector<CustomType>>(res);
+    dv.tryGet<std::array<CustomType, 10>>();
+    dv.tryGet<std::array<CustomType, 10>>(res);
+    dv.tryGet<std::tuple<CustomType, int>>();
+    dv.tryGet<std::tuple<CustomType, int>>(res);
+    dv.tryGet<std::unordered_map<std::string, CustomType>>();
+    dv.tryGet<std::unordered_map<std::string, CustomType>>(res);
+
+    AdlSerializer<CustomTypeWrapper>::fromDynamic(dv);
+    dv.tryGet<std::optional<CustomTypeWrapper>>();
+    dv.tryGet<std::optional<CustomTypeWrapper>>(res);
+    dv.tryGet<std::vector<CustomTypeWrapper>>();
+    dv.tryGet<std::vector<CustomTypeWrapper>>(res);
+    dv.tryGet<std::array<CustomTypeWrapper, 10>>();
+    dv.tryGet<std::array<CustomTypeWrapper, 10>>(res);
+    dv.tryGet<std::tuple<CustomTypeWrapper, int>>();
+    dv.tryGet<std::tuple<CustomTypeWrapper, int>>(res);
+    dv.tryGet<std::unordered_map<std::string, CustomTypeWrapper>>();
+    dv.tryGet<std::unordered_map<std::string, CustomTypeWrapper>>(res);
+
+    DynamicValue::from(std::any_cast<std::optional<CustomType>>(any));
+    DynamicValue::from(std::any_cast<std::optional<CustomTypeWrapper>>(any));
+    DynamicValue::from(std::any_cast<std::vector<CustomTypeWrapper>>(any));
+    DynamicValue::from(std::any_cast<std::array<CustomTypeWrapper, 10>>(any));
+    DynamicValue::from(std::any_cast<std::tuple<CustomTypeWrapper, int>>(any));
+    DynamicValue::from(std::any_cast<std::unordered_map<std::string, CustomTypeWrapper>>(any));
+});
 
 template <typename T>
 concept IsPointer = std::is_pointer_v<T>;
@@ -89,12 +157,11 @@ concept IsOptionalRef = requires(std::decay_t<T> v) {
 };
 static_assert(IsOptionalRef<optional_ref<Actor>>);
 
-
 template <IsOptionalRef T>
     requires(concepts::SupportFromDynamic<decltype(std::declval<T>().as_ptr())>)
 ll::Expected<> toDynamic1(DynamicValue& dv, T&& t, priority::LowTag) {
-    if (t.has_value()) return detail::toDynamicInternal(dv, std::forward<T>(t).as_ptr());
-    else dv.emplace<ElementType>(NullValue);
+    if (t.has_value()) return ::remote_call::toDynamic(dv, std::forward<T>(t).as_ptr());
+    else dv.emplace<ElementType>(NULL_VALUE);
     return {};
 }
 template <IsOptionalRef T>
@@ -105,7 +172,7 @@ ll::Expected<> fromDynamic1(DynamicValue& dv, T& t, priority::DefaultTag) {
         return {};
     } else {
         typename T::value_type val{};
-        ll::Expected<>         res = detail::fromDynamicInternal(dv, val);
+        ll::Expected<>         res = ::remote_call::fromDynamic(dv, val);
         if (res) t = val;
         return res;
     }

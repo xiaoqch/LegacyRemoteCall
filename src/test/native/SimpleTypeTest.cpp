@@ -5,10 +5,8 @@
 #include "ll/api/memory/Memory.h"
 #include "ll/api/thread/ServerThreadExecutor.h"
 #include "remote_call/api/RemoteCall.h"
-#include "reflection/Deserialization.h"
-#include "reflection/Serialization.h"
-#include "reflection/SerializationExt.h"
-#include "remote_call/api/value/DynamicValue.h"
+#include "test/native/reflection/Deserialization.h"
+#include "test/native/reflection/Serialization.h"
 
 #include <nlohmann/json.hpp>
 
@@ -116,12 +114,12 @@ ll::coro::CoroTask<bool> testJsonType() {
     constexpr auto& ns = TEST_EXPORT_NAMESPACE;
 
     auto const ori   = JsonB::random();
-    auto       value = remote_call::reflection::serialize<remote_call::DynamicValue>(ori);
+    auto       value = remote_call::DynamicValue::from(ori);
     if (!value) {
         value.error().log(getLogger());
         co_return false;
     }
-    auto res = remote_call::reflection::deserialize<JsonB>(*std::move(value));
+    auto res = value->tryGet<JsonB>();
     if (!res) {
         res.error().log(getLogger());
         co_return false;
@@ -171,7 +169,7 @@ JsonA JsonA::random() {
     // // b.i64  = dice(std::uniform_int_distribution<decltype(i64)>());
     b.f    = dice(std::uniform_real_distribution<decltype(f)>());
     b.d    = dice(std::uniform_real_distribution<decltype(d)>());
-    b.null = NullValue;
+    b.null = detail::NULL_VALUE;
     b.str  = ll::string_utils::intToHexStr(dice(std::uniform_int_distribution()));
     auto listview =
         std::views::iota(0, dice(std::uniform_int_distribution()) % 10 + 5) | std::views::transform([&dice](auto&&) {

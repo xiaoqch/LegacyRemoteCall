@@ -157,3 +157,4 @@ ll.exports((extra) => {
     logger.info("Received Extra Data: ", JSON.stringify(extra, replacer, 2));
     return extra;
 }, TEST_EXPORT_NAMESPACE, "lseTestExtra");
+import "./example.js";

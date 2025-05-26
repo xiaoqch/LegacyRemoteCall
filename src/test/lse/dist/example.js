@@ -1,17 +1,19 @@
-class RecipeApi {
-    static addShapeRecipe = ll.imports("RecipesReg", "addShapeRecipe");
+logger.info("Start Example Test");
+class RecipesApi {
+    static addShapeRecipe = ll.imports("RecipesApi", "addShapeRecipe");
 }
-mc.listen("onServerStarted", () => {
+setTimeout(() => {
+    logger.info("Registering recipe custom:lse_recipe");
     const shape = [
         "A A", //
         " A ",
         "A A",
     ];
     const types = [{ id: "minecraft:stone", flag: "A" }];
-    const result = RecipeApi.addShapeRecipe("custom:lse_recipe", mc.newItem("minecraft:gold_block", 3), shape, types, ["crafting_table"], 2, true);
+    const result = RecipesApi.addShapeRecipe("custom:lse_recipe", mc.newItem("minecraft:gold_block", 3), shape, types, ["crafting_table"], 2, true);
     if (result)
-        logger.info("Success");
+        logger.info("Recipe custom:lse_recipe added");
     else
-        logger.error("Error");
-});
+        logger.error("Failed to add recipe custom:lse_recipe");
+}, 50);
 export {};

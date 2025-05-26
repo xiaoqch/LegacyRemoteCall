@@ -2,7 +2,7 @@
 
 #include "Serialization.h"
 #include "remote_call/api/base/Concepts.h"
-#include "remote_call/api/conversion/detail/Detail.h"
+#include "remote_call/api/conversions/detail/Detail.h"
 #include "ll/api/Expected.h"
 
 class CompoundTag;
@@ -23,13 +23,13 @@ concept DeserializableFrom = requires(J& j, T& val) { deserialize_to(j, std::for
 template <concepts::SupportToDynamic T, typename J>
     requires(concepts::IsDynamicValue<std::decay_t<J>>)
 inline Expected<> serializeImpl(J& j, T&& val, ll::meta::PriorityTag<6>) {
-    return remote_call::detail::toDynamicInternal(j, std::forward<T>(val));
+    return ::remote_call::toDynamic(j, std::forward<T>(val));
 }
 
 // T -> remote_call::DynamicValue
 template <concepts::SupportFromDynamic T, concepts::IsDynamicValue J>
 inline Expected<> deserializeImpl(J& j, T& val, ll::meta::PriorityTag<6>) {
-    return detail::fromDynamicInternal(j, val);
+    return ::remote_call::fromDynamic(j, val);
 }
 
 // Convert remote_call::DynamicValue to other Universal Type

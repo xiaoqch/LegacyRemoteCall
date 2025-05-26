@@ -2,11 +2,8 @@
 #include "ll/api/chrono/GameChrono.h"
 #include "ll/api/reflection/Reflection.h"
 #include "ll/api/thread/ServerThreadExecutor.h"
+#include "mc/nbt/CompoundTag.h"
 #include "remote_call/api/RemoteCall.h"
-#include "remote_call/api/utils/ErrorUtils.h"
-
-#include <cassert>
-
 
 namespace remote_call::test {
 
@@ -123,7 +120,7 @@ bool                      testInvocation() {
     {
         // move only args and return
         std::string funcName = fmt::format("testFunc{}", ++index);
-        auto        testFunc = [&](Str2&& a1) -> Str2 { return std::forward<Str2>(a1); };
+        auto        testFunc = [&](Str2&& a1) -> Str2 { return std::move(a1); };
         exportAs(ns, funcName, testFunc);
         auto res = *importAs<decltype(testFunc)>(ns, funcName)(Str2("a1"));
         result   = res == "a1";
