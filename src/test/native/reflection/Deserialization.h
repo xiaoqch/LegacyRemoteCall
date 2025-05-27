@@ -193,7 +193,7 @@ inline Expected<> deserializeImpl(J& j, T& obj, ll::meta::PriorityTag<1>) {
         if (name.starts_with('$') || !res) {
             return;
         }
-        using member_type = std::remove_cvref_t<decltype((member))>;
+        using member_type = std::remove_cvref_t<decltype(member)>;
         auto sname        = std::string{name};
         if (j.contains(sname)) {
             if constexpr (requires(member_type& o, J& s) { deserialize_to<member_type>(s, o); }) {

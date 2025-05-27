@@ -166,7 +166,11 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& arr, ll::meta::PriorityTag
     size_t iter{0};
     for (auto&& val : std::forward<T>(arr)) {
         if (res) {
-            res = ::remote_call::toDynamic(dv.emplace_back(), std::forward<decltype((val))>(val));
+            if constexpr (std::is_lvalue_reference_v<decltype(arr)>) {
+                res = ::remote_call::toDynamic(dv.emplace_back(), val);
+            } else {
+                res = ::remote_call::toDynamic(dv.emplace_back(), std::move(val));
+            }
             if (!res) {
                 res = error_utils::makeSerIndexError(iter, res.error());
                 break;
@@ -218,11 +222,11 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& map, ll::meta::PriorityTag
     for (auto&& [k, v] : map) {
         std::string key;
         if constexpr (std::is_enum_v<typename RT::key_type>) {
-            key = magic_enum::enum_name(std::forward<decltype((k))>(k));
+            key = magic_enum::enum_name(std::forward<decltype(k)>(k));
         } else {
-            key = std::string{std::forward<decltype((k))>(k)};
+            key = std::string{std::forward<decltype(k)>(k)};
         }
-        res = ::remote_call::toDynamic(dv[key], std::forward<decltype((v))>(v));
+        res = ::remote_call::toDynamic(dv[key], std::forward<decltype(v)>(v));
         if (!res) {
             res = error_utils::makeSerKeyError(key, res.error());
             break;
@@ -269,7 +273,7 @@ template <class T>
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& obj, ll::meta::PriorityTag<1>) {
     ll::Expected<> res = {};
     dv                 = DynamicValue::object();
-    reflection::forEachMember(obj, [&](std::string_view name, auto&& member) {
+    reflection::forEachMember(std::forward<T>(obj), [&](std::string_view name, auto&& member) {
         if (name.starts_with('$') || !res) {
             return;
         }

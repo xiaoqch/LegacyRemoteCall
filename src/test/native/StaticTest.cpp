@@ -1,8 +1,12 @@
 #include "Test.h"
 #include "ll/api/Expected.h"
+#include "mc/world/item/ItemStack.h"
 #include "reflection/SerializationExt.h"
 #include "remote_call/api/RemoteCall.h"
+#include "remote_call/api/value/Base.h"
 #include "remote_call/api/value/DynamicValue.h"
+
+#include <any>
 
 
 namespace remote_call::test {
@@ -73,7 +77,7 @@ void test1(DynamicValue dv, std::tuple<Vec3, DimensionType> v) {
 } // namespace remote_call::test
 
 
-class CustomType : std::variant<std::string, ItemInstance> {
+class CustomType : public std::variant<std::string, ItemInstance> {
     std::string customName;
 
 public:
@@ -106,13 +110,34 @@ fromDynamic(remote_call::DynamicValue& dv, std::in_place_type_t<CustomType>, rem
     }
 }
 #endif
+
+template <typename T>
+    requires(std::same_as<std::decay_t<T>, CustomType>)
+ll::Expected<> toDynamic(remote_call::DynamicValue& dv, T&& v, remote_call::priority::HightTag) {
+    if (std::holds_alternative<std::string>(v)) {
+        return remote_call::DynamicValue::from(dv, std::get<std::string>(std::forward<T>(v)));
+    } else if (std::holds_alternative<ItemInstance>(v)) {
+        return remote_call::DynamicValue::from(
+            dv,
+            std::make_unique<ItemStack>(std::get<ItemInstance>(std::forward<T>(v)))
+        );
+    } else {
+        return ll::makeStringError("Invalid type");
+    }
+}
+
 struct CustomTypeWrapper {
     std::string name;
     CustomType  customType;
 };
 namespace remote_call::test {
 
-static_assert(SupportFromDynamic<std::optional<CustomType>>);
+static_assert(FullSupported<CustomType>);
+static_assert(FullSupported<std::optional<CustomTypeWrapper>>);
+static_assert(FullSupported<std::vector<CustomTypeWrapper>>);
+static_assert(FullSupported<std::array<CustomTypeWrapper, 10>>);
+static_assert(FullSupported<std::unordered_map<std::string, CustomTypeWrapper>>);
+static_assert(FullSupported<std::tuple<std::string, CustomTypeWrapper>>);
 inline void testConvert(DynamicValue dv, ll::Expected<> res) {
     // fromDynamic1(dv, std::in_place_type<std::optional<CustomType>>, priority::Hightest);
     (void)AdlSerializer<CustomType>::fromDynamic(dv);
@@ -138,13 +163,13 @@ inline void testConvert(DynamicValue dv, ll::Expected<> res) {
     (void)dv.tryGet<std::tuple<CustomTypeWrapper, int>>(res);
     (void)dv.tryGet<std::unordered_map<std::string, CustomTypeWrapper>>();
     (void)dv.tryGet<std::unordered_map<std::string, CustomTypeWrapper>>(res);
-
-    // (void)DynamicValue::from(std::any_cast<std::optional<CustomType>>(any));
-    // (void)DynamicValue::from(std::any_cast<std::optional<CustomTypeWrapper>>(any));
-    // (void)DynamicValue::from(std::any_cast<std::vector<CustomTypeWrapper>>(any));
-    // (void)DynamicValue::from(std::any_cast<std::array<CustomTypeWrapper, 10>>(any));
-    // (void)DynamicValue::from(std::any_cast<std::tuple<CustomTypeWrapper, int>>(any));
-    // (void)DynamicValue::from(std::any_cast<std::unordered_map<std::string, CustomTypeWrapper>>(any));
+    std::any any;
+    (void)DynamicValue::from(std::any_cast<std::optional<CustomType>>(any));
+    (void)DynamicValue::from(std::any_cast<std::optional<CustomTypeWrapper>>(any));
+    (void)DynamicValue::from(std::any_cast<std::vector<CustomTypeWrapper>>(any));
+    (void)DynamicValue::from(std::any_cast<std::array<CustomTypeWrapper, 10>>(any));
+    (void)DynamicValue::from(std::any_cast<std::tuple<CustomTypeWrapper, int>>(any));
+    (void)DynamicValue::from(std::any_cast<std::unordered_map<std::string, CustomTypeWrapper>>(any));
     success("");
 };
 

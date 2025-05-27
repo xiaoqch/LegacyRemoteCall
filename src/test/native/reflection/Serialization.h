@@ -137,7 +137,7 @@ inline Expected<> serializeImpl(J& j, T&& arr, ll::meta::PriorityTag<2>)
     size_t     iter{0};
     for (auto&& val : std::forward<T>(arr)) {
         if (res) {
-            res = serialize_to<J>(j.emplace_back(), std::forward<decltype((val))>(val));
+            res = serialize_to<J>(j.emplace_back(), std::forward<decltype(val)>(val));
             if (!res) {
                 res = error_utils::makeSerIndexError(iter, res.error());
                 break;
@@ -161,11 +161,11 @@ inline Expected<> serializeImpl(J& j, T&& map, ll::meta::PriorityTag<2>)
     for (auto&& [k, v] : map) {
         std::string key;
         if constexpr (std::is_enum_v<typename RT::key_type>) {
-            key = magic_enum::enum_name(std::forward<decltype((k))>(k));
+            key = magic_enum::enum_name(std::forward<decltype(k)>(k));
         } else {
-            key = std::string{std::forward<decltype((k))>(k)};
+            key = std::string{std::forward<decltype(k)>(k)};
         }
-        res = serialize_to<J>(j[key], std::forward<decltype((v))>(v));
+        res = serialize_to<J>(j[key], std::forward<decltype(v)>(v));
         if (!res) {
             res = error_utils::makeSerKeyError(key, res.error());
             break;
@@ -185,7 +185,7 @@ inline Expected<> serializeImpl(J& j, T&& obj, ll::meta::PriorityTag<1>)
         if (name.starts_with('$') || !res) {
             return;
         }
-        using member_type = decltype((member));
+        using member_type = decltype(member);
         if constexpr (requires(member_type m) { serialize_to(j, std::forward<member_type>(m)); }) {
             res = serialize_to(j[name], std::forward<member_type>(member));
             if (!res) {
