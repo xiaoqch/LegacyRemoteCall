@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ll/api/Expected.h"
 #include "ll/api/io/LogLevel.h"
 #include "ll/api/io/LoggerRegistry.h"
 #include "ll/api/utils/StringUtils.h"
@@ -21,4 +22,11 @@ inline auto& getLogger() {
 inline void success(std::string_view msg) {
     getLogger().info(ll::string_utils::replaceMcToAnsiCode(fmt::format("{}{}", ColorFormat::GREEN, msg)));
 }
+
+inline auto logAndAssert(ll::Error&& error) {
+    error.log(getLogger());
+    assert(false && "Remote call error occurred");
+    return std::forward<decltype(error)>(error);
+};
+
 } // namespace remote_call::test

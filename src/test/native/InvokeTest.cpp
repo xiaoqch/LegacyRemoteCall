@@ -1,9 +1,11 @@
 #include "Test.h"
+#include "ll/api/Expected.h"
 #include "ll/api/chrono/GameChrono.h"
 #include "ll/api/reflection/Reflection.h"
 #include "ll/api/thread/ServerThreadExecutor.h"
 #include "mc/nbt/CompoundTag.h"
 #include "remote_call/api/RemoteCall.h"
+
 
 namespace remote_call::test {
 
@@ -77,25 +79,26 @@ bool                      testInvocation() {
     bool            result  = false;
     auto            success = [&] { return !(result = !result); };
     size_t          index   = 0;
+
     {
         std::string funcName = fmt::format("testFunc{}", ++index);
         auto        testFunc = [&]() { result = true; };
-        exportAs(ns, funcName, testFunc);
-        importAs<decltype(testFunc)>(ns, funcName)();
-        assert(success());
+        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
+        importAs<decltype(testFunc)>(ns, funcName)().transform_error(logAndAssert);
     }
     {
         std::string funcName = fmt::format("testFunc{}", ++index);
         auto testFunc = [&](Str a1, Str const& a2, Str&& a3) { result = a1 == "a1" && a2 == "a2" && a3 == "a3"; };
-        exportAs(ns, funcName, testFunc);
-        importAs<decltype(testFunc)>(ns, funcName)(Str("a1"), Str("a2"), Str("a3"));
+        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
+        importAs<decltype(testFunc)>(ns, funcName)(Str("a1"), Str("a2"), Str("a3")).transform_error(logAndAssert);
         assert(success());
     }
     {
         std::string funcName = fmt::format("testFunc{}", ++index);
         auto        testFunc = [&](Str a1, Str const& a2, Str&& a3) { return std::tuple{a1, a2, a3}; };
-        exportAs(ns, funcName, std::move(testFunc));
-        auto res = *importAs<decltype(testFunc)>(ns, funcName)(Str("a1"), Str("a2"), Str("a3"));
+        exportAs(ns, funcName, std::move(testFunc)).transform_error(logAndAssert);
+        auto res =
+            *importAs<decltype(testFunc)>(ns, funcName)(Str("a1"), Str("a2"), Str("a3")).transform_error(logAndAssert);
         result = std::get<0>(res) == "a1" && std::get<1>(res) == "a2" && std::get<2>(res) == "a3";
         assert(success());
     }
@@ -105,15 +108,16 @@ bool                      testInvocation() {
         struct TestFunc {
             auto operator()(Str a1, Str const& a2, Str&& a3) { return std::tuple{a1, a2, a3}; };
         } testFunc;
-        exportAs(ns, funcName, testFunc);
-        auto res = *importAs<TestFunc>(ns, funcName)(Str("a1"), Str("a2"), Str("a3"));
+        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
+        auto res = *importAs<TestFunc>(ns, funcName)(Str("a1"), Str("a2"), Str("a3")).transform_error(logAndAssert);
         result = std::get<0>(res) == "a1" && std::get<1>(res) == "a2" && std::get<2>(res) == "a3";
         assert(success());
     }
     {
         std::string funcName = fmt::format("testFunc{}", ++index);
-        exportAs(ns, funcName, testFunc);
-        auto res = *importAs<decltype(testFunc)>(ns, funcName)(Str("a1"), Str("a2"), Str("a3"));
+        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
+        auto res =
+            *importAs<decltype(testFunc)>(ns, funcName)(Str("a1"), Str("a2"), Str("a3")).transform_error(logAndAssert);
         result = std::get<0>(res) == "a1" && std::get<1>(res) == "a2" && std::get<2>(res) == "a3";
         assert(success());
     }
@@ -121,9 +125,9 @@ bool                      testInvocation() {
         // move only args and return
         std::string funcName = fmt::format("testFunc{}", ++index);
         auto        testFunc = [&](Str2&& a1) -> Str2 { return std::move(a1); };
-        exportAs(ns, funcName, testFunc);
-        auto res = *importAs<decltype(testFunc)>(ns, funcName)(Str2("a1"));
-        result   = res == "a1";
+        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
+        auto res = *importAs<decltype(testFunc)>(ns, funcName)(Str2("a1")).transform_error(logAndAssert);
+        result = res == "a1";
         assert(success());
     }
     {
@@ -139,7 +143,7 @@ bool                      testInvocation() {
         // args count not match
         std::string funcName = fmt::format("testFunc{}", ++index);
         auto        testFunc = [&](Str const& a1) -> Str { return a1; };
-        exportAs(ns, funcName, testFunc);
+        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
         auto res = importAs<Str()>(ns, funcName)();
         assert(!res);
         assert(res.error().isA<error_utils::RemoteCallError>());
@@ -150,7 +154,7 @@ bool                      testInvocation() {
         // args type not match
         std::string funcName = fmt::format("testFunc{}", ++index);
         auto        testFunc = [&](Str const& a1) -> Str { return a1; };
-        exportAs(ns, funcName, testFunc);
+        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
         auto res = importAs<Str(int)>(ns, funcName)(7);
         assert(!res);
         assert(res.error().isA<error_utils::RemoteCallError>());
@@ -164,7 +168,7 @@ bool                      testInvocation() {
         // args[0].node.property.value.pos
         std::string funcName = fmt::format("testFunc{}", ++index);
         auto        testFunc = [&](Root const& a1) -> BlockPos { return a1.node.property.value.pos; };
-        exportAs(ns, funcName, testFunc);
+        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
         auto res = importAs<Player*(AnotherRoot const&)>(ns, funcName)({});
         assert(!res);
         auto msg = res.error().message();
@@ -175,12 +179,52 @@ bool                      testInvocation() {
     }
     {
         std::string funcName = fmt::format("testFunc{}", ++index);
-        Str         s{"abcdefghijklmnopqrstuvwxyz"};
-        auto        testFunc = [s]() mutable -> Str { return s; };
+        auto        testFunc = [&](CompoundTag& tag) -> CompoundTag& { return tag; };
+        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
+        auto tag       = std::make_unique<CompoundTag>();
+        (*tag)["test"] = "value";
+        CompoundTag& res =
+            *importAs<CompoundTag&(std::unique_ptr<CompoundTag>&)>(ns, funcName)(tag).transform_error(logAndAssert);
+        assert(res["test"] == "value");
+    }
+    {
+        std::string funcName = fmt::format("testFunc{}", ++index);
+        auto testFunc = [&](CompoundTag&) -> ll::Expected<bool> { return ll::makeStringError("TestUnexpected"); };
+        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
+        auto tag       = std::make_unique<CompoundTag>();
+        (*tag)["test"] = "value";
+        auto res       = importAs<decltype(testFunc)>(ns, funcName)(*tag);
+        assert(!res);
+        assert(res.error().message().find("TestUnexpected") != std::string::npos);
+    }
+    {
+        // Optional args
+        std::string funcName = fmt::format("testFunc{}", ++index);
+        auto        testFunc = [&](std::optional<std::string> a) -> ll::Expected<std::string> {
+            return a.value_or("default");
+        };
+        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
+        auto tag       = std::make_unique<CompoundTag>();
+        (*tag)["test"] = "value";
+        auto res1      = *importAs<std::string()>(ns, funcName)().transform_error(logAndAssert);
+        assert(res1 == "default");
+        auto res2 = *importAs<std::string(std::optional<std::string>)>(ns, funcName)(std::nullopt)
+                         .transform_error(logAndAssert);
+        assert(res2 == "default");
+        auto res3 = *importAs<std::string(std::optional<std::string>)>(ns, funcName)(std::make_optional("value"))
+                         .transform_error(logAndAssert);
+        assert(res3 == "value");
+        auto res4 = *importAs<std::string(std::string const&)>(ns, funcName)("value").transform_error(logAndAssert);
+        assert(res4 == "value");
+    }
+    {
+        std::string funcName = fmt::format("testFunc{}", ++index);
+        Str         s{"abcdefghijklmnopqrstuvwxy"};
+        auto        testFunc = [s]() mutable -> Str { return Str{s.s + "z"}; };
         exportAs(ns, funcName, testFunc);
         ll::thread::ServerThreadExecutor::getDefault().executeAfter(
             [ns, funcName] {
-                auto str = *importAs<Str()>(ns, funcName)();
+                auto str = *importAs<Str()>(ns, funcName)().transform_error(logAndAssert);
                 assert(str == "abcdefghijklmnopqrstuvwxyz");
             },
             ll::chrono::ticks{20}

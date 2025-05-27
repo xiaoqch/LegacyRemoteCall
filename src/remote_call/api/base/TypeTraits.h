@@ -32,4 +32,28 @@ struct is_variant_alternative<std::variant<Types...>, T> : std::disjunction<std:
 template <typename VariantType, typename T>
 inline constexpr bool is_variant_alternative_v = is_variant_alternative<VariantType, T>::value;
 
+
+template <typename T>
+struct is_reference_wrapper : std::false_type {};
+template <typename T>
+struct is_reference_wrapper<std::reference_wrapper<T>> : std::true_type {};
+
+template <typename T>
+constexpr bool is_reference_wrapper_v = is_reference_wrapper<T>::value;
+template <typename T>
+struct remove_reference_wrapper {
+    using type = T;
+};
+template <typename T>
+struct remove_reference_wrapper<std::reference_wrapper<T>> {
+    using type = T&;
+};
+template <typename T>
+using remove_reference_wrapper_t = typename remove_reference_wrapper<T>::type;
+template <typename T>
+using reference_to_pointer_t = std::add_pointer_t<std::remove_reference_t<remove_reference_wrapper_t<T>>>;
+template <typename T>
+using reference_to_wrapper_t = std::reference_wrapper<std::remove_reference_t<remove_reference_wrapper_t<T>>>;
+
+
 } // namespace remote_call::traits

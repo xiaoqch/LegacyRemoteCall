@@ -9,15 +9,17 @@
 #include "mc/world/level/block/actor/BlockActor.h"
 #include "remote_call/api/base/Concepts.h"
 #include "remote_call/api/base/Meta.h"
-#include "remote_call/api/conversions/detail/Detail.h"
+#include "remote_call/api/base/TypeTraits.h"
 #include "remote_call/api/utils/ErrorUtils.h"
 #include "remote_call/api/value/Base.h"
 #include "remote_call/api/value/DynamicValue.h"
 
+
 namespace remote_call::detail {
 
 // bool, std::string, NullType, Player*, Actor*, BlockActor*, Container*
-template <concepts::IsNormalElement T>
+template <typename T>
+    requires(concepts::IsNormalElement<std::decay_t<T>>)
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::HightTag) {
     if constexpr (std::is_pointer_v<std::decay_t<T>>) {
         if (t == nullptr) {
@@ -43,7 +45,7 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
 
 // String like
 template <concepts::IsString T>
-    requires(!concepts::IsValueElement<T>)
+    requires(!concepts::IsValueElement<std::decay_t<T>>)
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::LowTag) {
     dv.emplace<ElementType>(std::string{std::forward<T>(t)});
     return {};
@@ -58,8 +60,8 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::LowTag) {
 
 namespace detail {
 
-template <typename NativeType, concepts::IsCustomElement V>
-    requires(concepts::CompatibleWithCustomElement<NativeType, V>)
+template <typename NativeType, typename V>
+    requires(concepts::IsCustomElement<std::decay_t<V>> && concepts::CompatibleWithCustomElement<NativeType, V>)
 struct CustomElementConverter {
 public:
     template <typename T = NativeType>
@@ -107,7 +109,7 @@ COMPACT_TYPE_CONVERTER(NumberType);
 
 // Actor*, Player*...
 template <std::convertible_to<Actor const*> T>
-    requires(!concepts::IsValueElement<T>)
+    requires(!concepts::IsValueElement<std::decay_t<T>>)
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::DefaultTag) {
     if constexpr (!std::convertible_to<T, Player const*>)
         dv.template emplace<ElementType>(const_cast<Actor*>(static_cast<Actor const*>(std::forward<decltype(t)>(t))));
@@ -148,7 +150,7 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::HightTag) {
 template <concepts::IsPos T>
 inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
     if (dv.hold<BlockPosType>()) {
-        auto&& val = std::move(dv).get<BlockPosType>();
+        auto&& val = dv.get<BlockPosType>();
         t          = val.pos;
         return {};
     } else if (dv.hold<WorldPosType>()) {
@@ -199,18 +201,39 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, Pos& t, priority::DefaultTag
 // T& -> T* -> remote_call::DynamicValue
 // T: Player, BlockActor...
 template <typename T>
-    requires(std::is_lvalue_reference_v<T> && concepts::SupportToDynamic<std::add_pointer_t<std::remove_reference_t<T>>>)
+    requires(std::is_lvalue_reference_v<T> && concepts::SupportToDynamic<traits::reference_to_pointer_t<T>>)
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::LowTag) {
-    return ::remote_call::toDynamic(dv, std::forward<std::add_pointer_t<std::remove_reference_t<T>>>(&t));
+    return ::remote_call::toDynamic(dv, std::forward<traits::reference_to_pointer_t<T>>(&t));
 }
 
-// template <typename T>
-//     requires(std::is_lvalue_reference_v<T> &&
-//     concepts::SupportFromDynamic<std::add_pointer_t<std::remove_reference_t<T>>>)
-// inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
-//     return ::remote_call::fromDynamic(dv, std::forward<std::add_pointer_t<std::remove_reference_t<T>>>(&t));
-// }
+// reference_wrapper<T> -> T* -> remote_call::DynamicValue
+template <typename T>
+    requires(traits::is_reference_wrapper_v<std::decay_t<T>> && concepts::SupportToDynamic<traits::reference_to_pointer_t<std::decay_t<T>>>)
+inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::LowTag) {
+    return ::remote_call::toDynamic(dv, std::forward<traits::reference_to_pointer_t<std::decay_t<T>>>(&t.get()));
+}
 
+// remote_call::DynamicValue -> T* -> std::reference_wrapper<T>
+template <typename T>
+    requires(std::is_lvalue_reference_v<T> && concepts::SupportFromDynamic<traits::reference_to_pointer_t<T>>)
+inline ll::Expected<traits::reference_to_wrapper_t<T>>
+fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, priority::LowTag) {
+    return dv.tryGet<traits::reference_to_pointer_t<T>>().transform(
+        [](auto&& ptr) -> traits::reference_to_wrapper_t<T> { return std::ref(*ptr); }
+    );
+}
+
+// remote_call::DynamicValue -> T* -> std::reference_wrapper<T>
+template <typename T>
+    requires(traits::is_reference_wrapper_v<T> && concepts::SupportFromDynamic<traits::reference_to_pointer_t<T>>)
+inline ll::Expected<traits::reference_to_wrapper_t<T>>
+fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, priority::LowTag) {
+    return dv.tryGet<traits::reference_to_pointer_t<T>>().transform(
+        [](auto&& ptr) -> traits::reference_to_wrapper_t<T> { return std::ref(*ptr); }
+    );
+}
+
+// Block*
 template <typename T>
     requires(std::same_as<std::decay_t<T>, Block*>)
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::PriorityTag<1>) {

@@ -10,9 +10,6 @@
 #include "remote_call/api/conversions/detail/Detail.h"
 #include "remote_call/api/value/Base.h"
 
-#include <string_view>
-#include <type_traits>
-
 
 namespace remote_call {
 // NOLINTBEGIN: google-explicit-constructor
@@ -53,7 +50,9 @@ struct DynamicValue : public detail::DynamicBase<DynamicValue> {
         requires(requires(T&& v) { ElementType(std::forward<T>(v)); })
     DynamicValue(T&& v) : BaseType(ElementType(std::forward<T>(v))){};
     template <concepts::SupportToDynamic T>
-        requires(!requires(T&& v) { ElementType(std::forward<T>(v)); } && !std::same_as<T, DynamicValue>)
+        requires(!requires(T&& v) {
+            ElementType(std::forward<T>(v));
+        } && !std::same_as<T, DynamicValue> && !IsAnyDynamicElement<T>)
     DynamicValue(T&& v) : BaseType() {
         ll::Expected<> res = ::remote_call::toDynamic(*this, std::forward<T>(v));
         if (!res) {
@@ -122,42 +121,56 @@ struct DynamicValue : public detail::DynamicBase<DynamicValue> {
         out = get<T>();
         return {};
     }
-    template <concepts::SupportFromDynamic T>
-        requires(!IsAnyDynamicElement<T> && concepts::SupportFromDynamicC<T>)
+    template <concepts::SupportFromDynamicC T>
+        requires(!IsAnyDynamicElement<T>)
     [[nodiscard]] inline ll::Expected<> getTo(T& out) {
         auto res = AdlSerializer<T>::fromDynamic(*this);
-        if (!res) return ll::forwardError(res.error());
+        if (!res) return ll::forwardError(std::move(res).error());
         out = std::move(res).value();
         return {};
     }
-    template <concepts::SupportFromDynamic T>
-        requires(!IsAnyDynamicElement<T> && !concepts::SupportFromDynamicC<T> && concepts::SupportFromDynamicR<T>)
+    template <concepts::SupportFromDynamicR T>
+        requires(!IsAnyDynamicElement<T>)
     [[nodiscard]] inline ll::Expected<> getTo(T& out) {
         return AdlSerializer<T>::fromDynamic(*this, out);
     }
-
-    template <concepts::SupportFromDynamic T>
-        requires(concepts::SupportFromDynamicC<T>)
+    template <std::same_as<void> T>
+    [[nodiscard]] inline ll::Expected<T> tryGet() {
+        // if (!is_null()) return error_utils::makeFromDynamicTypeError<T, NullType>(*this);
+        return {};
+    }
+    template <concepts::SupportFromDynamicC T>
+        requires(!std::is_lvalue_reference_v<T>)
     [[nodiscard]] inline ll::Expected<T> tryGet() {
         return AdlSerializer<T>::fromDynamic(*this);
     }
-    template <concepts::SupportFromDynamic T>
-        requires(!concepts::SupportFromDynamicC<T>)
+    template <typename T>
+        requires(!std::is_reference_v<T> && !concepts::SupportFromDynamicC<T> && concepts::SupportFromDynamicR<T>)
     [[nodiscard]] inline ll::Expected<T> tryGet() {
         T    v{};
-        auto result = AdlSerializer<T>::fromDynamic(*this, v);
-        if (result) return v;
+        auto result = AdlSerializer<std::decay_t<T>>::fromDynamic(*this, v);
+        if (result) return std::move(v);
         else return ll::forwardError(result.error());
     }
-    template <concepts::SupportFromDynamic T>
-        requires(concepts::SupportFromDynamicC<T>)
+    template <typename T>
+        requires(std::is_lvalue_reference_v<T> && concepts::SupportFromDynamic<traits::reference_to_wrapper_t<T>>)
+    [[nodiscard]] inline ll::Expected<traits::reference_to_wrapper_t<T>> tryGet() {
+        return tryGet<traits::reference_to_wrapper_t<T>>();
+    }
+    template <typename T>
+        requires((std::is_rvalue_reference_v<T> || (std::is_lvalue_reference_v<T> && std::is_const_v<std::remove_reference_t<T>>)) && concepts::SupportFromDynamic<std::decay_t<T>>)
+    [[nodiscard]] inline ll::Expected<std::decay_t<T>> tryGet() {
+        return tryGet<std::decay_t<T>>();
+    }
+
+    template <concepts::SupportFromDynamicC T>
     [[nodiscard]] inline std::optional<T> tryGet(ll::Expected<>& success) {
         auto result = tryGet<T>();
         if (result) return *std::move(result);
         success = ll::forwardError(result.error());
         return {};
     }
-    template <concepts::SupportFromDynamic T>
+    template <concepts::SupportFromDynamicR T>
         requires(!concepts::SupportFromDynamicC<T>)
     [[nodiscard]] inline std::optional<T> tryGet(ll::Expected<>& success) {
         T v{};
@@ -166,13 +179,18 @@ struct DynamicValue : public detail::DynamicBase<DynamicValue> {
         return {};
     }
     template <typename T>
-        requires(std::is_lvalue_reference_v<T> && concepts::SupportFromDynamic<std::remove_reference_t<T>*>)
+        requires(std::is_lvalue_reference_v<T> && concepts::SupportFromDynamic<traits::reference_to_pointer_t<T>>)
     [[nodiscard]] inline optional_ref<std::remove_reference_t<T>> tryGet(ll::Expected<>& success) {
-        std::remove_reference_t<T>* ptr{};
+        traits::reference_to_pointer_t<T> ptr{};
         if (success) success = getTo(ptr);
         if (success) return ptr;
         return {};
     }
+    template <typename T>
+    [[nodiscard]] inline static ll::Expected<> from(DynamicValue& dv, T&& v) {
+        return AdlSerializer<std::decay_t<T>>::toDynamic(dv, std::forward<T>(v));
+    }
+
     template <typename T>
     [[nodiscard]] inline static ll::Expected<DynamicValue> from(T&& v) {
         ll::Expected<DynamicValue> dv{NULL_VALUE};

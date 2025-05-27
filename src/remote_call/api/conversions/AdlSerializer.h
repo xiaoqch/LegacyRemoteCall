@@ -36,7 +36,9 @@ concept SupportToDynamic =
 
 
 template <typename T>
-concept SupportFromDynamicR = requires(DynamicValue& dv, T& t) { AdlSerializer<T>::fromDynamic(dv, t); };
+concept SupportFromDynamicR = requires(DynamicValue& dv, std::remove_cvref_t<T>& t) {
+    AdlSerializer<std::remove_cvref_t<T>>::fromDynamic(dv, t);
+};
 template <typename T>
 concept SupportFromDynamicC = requires(DynamicValue& dv) {
     { AdlSerializer<T>::fromDynamic(dv) } -> ll::concepts::IsOneOf<T, ll::Expected<T>>;

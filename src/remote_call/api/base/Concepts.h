@@ -31,10 +31,10 @@ concept IsDynamicValue = std::same_as<T, DynamicValue>;
 
 template <typename T>
 concept IsNormalElement =
-    ll::concepts::IsOneOf<std::decay_t<T>, bool, std::string, NullType, Player*, Actor*, BlockActor*, Container*>;
+    ll::concepts::IsOneOf<T, bool, std::string, NullType, Player*, Actor*, BlockActor*, Container*>;
 template <typename T>
 concept IsCustomElement =
-    ll::concepts::IsOneOf<std::decay_t<T>, NumberType, WorldPosType, BlockPosType, ItemType, BlockType, NbtType>;
+    ll::concepts::IsOneOf<T, NumberType, WorldPosType, BlockPosType, ItemType, BlockType, NbtType>;
 template <typename T>
 concept IsValueElement = IsNormalElement<T> || IsCustomElement<T>;
 

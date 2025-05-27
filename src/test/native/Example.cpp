@@ -73,7 +73,7 @@ fromDynamic(remote_call::DynamicValue& dv, std::in_place_type_t<Recipes::Type>, 
     // return dv.getTo(tmp).transform([&]() { return static_cast<Recipes::Type>(tmp); });
 }
 // Function
-auto addShapeRecipe(
+ll::Expected<bool> addShapeRecipe(
     ::std::string const&                 recipeId,
     ::ItemInstance const&                result,
     ::std::vector<::std::string> const&  rows,
@@ -92,21 +92,22 @@ auto addShapeRecipe(
         recipes.addShapedRecipe(recipeId, result, rows, types, tags, priority, {}, req, ver, assumeSymmetry);
 
         HashedString key{recipeId};
-        auto&        map = *recipes.mRecipes;
+        auto const&  map = *recipes.mRecipes;
         for (auto& tag : tags) {
-            if (!map.contains(tag) || !map[tag].contains(key)) {
-                return false;
+            if (!map.contains(tag) || !map.at(tag).contains(key)) {
+                return ll::makeStringError(fmt::format(
+                    "Unknown Error occurred. Recipe with id '{}' and tag '{}' not found",
+                    recipeId,
+                    tag.getString()
+                ));
             }
         }
         if (ll::service::getLevel()->getPlayerList().size() > 0)
             CraftingDataPacket::prepareFromRecipes(recipes, true)->sendToClients();
         return true;
     } catch (...) {
-        ll::makeExceptionError().error().log(remote_call::test::getLogger());
-        /// TODO: return ll::Expected<>;
-        // return ll::makeExceptionError();
+        return ll::makeExceptionError();
     }
-    return false;
 }
 
 ll::Expected<> exportApi() {

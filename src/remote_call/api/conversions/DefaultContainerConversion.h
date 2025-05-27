@@ -1,11 +1,14 @@
 #pragma once
 
+#include "fmt/core.h"
 #include "ll/api/Expected.h"
 #include "ll/api/base/Concepts.h"
 #include "ll/api/reflection/Reflection.h"
+#include "ll/api/reflection/TypeName.h"
 #include "magic_enum.hpp"
 #include "remote_call/api/base/Concepts.h"
 #include "remote_call/api/base/Meta.h"
+#include "remote_call/api/conversions/AdlSerializer.h"
 #include "remote_call/api/reflection/Reflection.h"
 #include "remote_call/api/utils/ErrorUtils.h"
 #include "remote_call/api/value/DynamicValue.h"
@@ -28,10 +31,7 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
         t = {};
         return {};
     } else {
-        typename T::value_type val{};
-        ll::Expected<>         res = ::remote_call::fromDynamic(dv, val);
-        if (res) t = val;
-        return res;
+        return dv.tryGet<typename T::value_type>().transform([&](auto&& val) { t = std::forward<decltype(val)>(val); });
     }
 }
 template <ll::concepts::IsOptional T>
@@ -40,9 +40,9 @@ inline ll::Expected<T> fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, pr
     if (dv.hold<NullType>()) {
         return {};
     } else {
-        auto res = dv.tryGet<typename std::remove_cvref_t<T>::value_type>();
-        if (!res) return ll::forwardError(res.error());
-        return T{std::in_place, *res};
+        return dv.tryGet<typename std::remove_cvref_t<T>::value_type>().transform([&](auto&& val) {
+            return std::make_optional<std::remove_cvref_t<T>::value_type>(std::forward<decltype(val)>(val));
+        });
     }
 }
 
@@ -55,7 +55,7 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& vec, ll::meta::PriorityTag
     std::remove_cvref_t<T>::forEachComponent([&]<typename axis_type, size_t iter> {
         if (res) {
             res = ::remote_call::toDynamic(dv.emplace_back(), std::forward<T>(vec).template get<axis_type, iter>());
-            if (!res.has_value()) res = error_utils::makeSerIndexError(iter, res.error());
+            if (!res) res = error_utils::makeSerIndexError(iter, res.error());
         }
     });
     return res;
@@ -112,9 +112,8 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& tuple, ll::meta::Priority
 template <typename Tpl, size_t... I>
 ll::Expected<Tpl> fromDynamicTupleImpl(DynamicValue& dv, std::in_place_type_t<Tpl>, std::index_sequence<I...>) {
     ll::Expected<> res;
-    const auto     getElement =
-        [&]<size_t Idx, typename ElementType>(std::in_place_index_t<Idx>, std::in_place_type_t<ElementType>)
-        -> std::optional<ElementType> {
+    constexpr auto getElement =
+        []<size_t Idx, typename ElementType>(DynamicValue& dv, ll::Expected<>& res) -> std::optional<ElementType> {
         if (!res) return std::nullopt;
         if (dv.size() > Idx) {
             if constexpr (requires() { dv[Idx].template tryGet<ElementType>(res); }) {
@@ -132,16 +131,17 @@ ll::Expected<Tpl> fromDynamicTupleImpl(DynamicValue& dv, std::in_place_type_t<Tp
                     fmt::format("index \"{}\" outof range", Idx)
                 );
             } else {
-                return std::make_optional(std::in_place, std::nullopt);
+                return std::make_optional<ElementType>(std::nullopt);
             }
         }
         if (!res) res = error_utils::makeSerIndexError(Idx, res.error());
         return std::nullopt;
     };
-    auto tmp = std::make_tuple(getElement(std::in_place_index<I>, std::in_place_type<std::tuple_element_t<I, Tpl>>)...);
+    auto tmp = std::make_tuple(getElement.template operator()<I, std::tuple_element_t<I, Tpl>>(dv, res)...);
     if (res) return Tpl{*std::get<I>(std::move(tmp))...};
     return ll::forwardError(res.error());
 }
+
 static_assert(std::same_as<std::tuple_element_t<5, std::array<int, 11>>, int>);
 template <concepts::IsTupleLike T>
     requires(!std::is_default_constructible_v<T>)
@@ -177,6 +177,7 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& arr, ll::meta::PriorityTag
     return res;
 }
 template <ll::concepts::ArrayLike T>
+    requires(requires() { typename T::value_type; })
 inline ll::Expected<> fromDynamic(DynamicValue& dv, T& arr, ll::meta::PriorityTag<1>) {
     if (!dv.is_array()) return error_utils::makeFromDynamicTypeError<T, ArrayType>(dv);
     using value_type = typename T::value_type;
@@ -241,12 +242,16 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& map, ll::meta::PriorityTa
     map.clear();
     for (auto&& [k, v] : dv.items()) {
         if constexpr (std::is_enum_v<typename T::key_type>) {
-            constexpr auto key = magic_enum::enum_cast<typename T::key_type>(k).value();
-            if (auto res = v.tryGet<typename T::mapped_type>()) {
-                map.try_emplace(key, *std::move(res));
-            } else {
-                return error_utils::makeSerKeyError(key, res.error());
-            }
+            auto key = magic_enum::enum_cast<typename T::key_type>(k);
+            if (!key)
+                return error_utils::makeError(
+                    error_utils::ErrorReason::Unknown,
+                    fmt::
+                        format("enum key '{}' cannot parse as '{}'", k, ll::reflection::type_name_v<typename T::key_type>)
+                );
+            auto res = v.tryGet<typename T::mapped_type>();
+            if (!res) return error_utils::makeSerKeyError(k, res.error());
+            map.try_emplace(*key, *std::move(res));
         } else {
             if (auto res = v.tryGet<typename T::mapped_type>()) {
                 map.try_emplace(k, *std::move(res));
@@ -275,7 +280,7 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& obj, ll::meta::PriorityTag
                 res = error_utils::makeSerMemberError(std::string{name}, res.error());
             }
         } else {
-            res = error_utils::makeSerMemberError(std::string{name}, res.error());
+            __debugbreak();
             static_assert(ll::traits::always_false<member_type>, "this type can't serialize");
         }
     });
@@ -381,8 +386,10 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& e, ll::meta::PriorityTag<
     using enum_type = std::remove_cvref_t<T>;
     if (dv.is_string()) {
         e = magic_enum::enum_cast<enum_type>(std::string{dv}).value();
+    } else if (dv.is_number()) {
+        e = magic_enum::enum_cast<enum_type>(dv.get<NumberType>().get<std::underlying_type_t<enum_type>>()).value();
     } else {
-        e = magic_enum::enum_cast<enum_type>(std::underlying_type_t<enum_type>{dv}).value();
+        return error_utils::makeFromDynamicTypeError<T, std::string, NumberType>(dv);
     }
     return {};
 }

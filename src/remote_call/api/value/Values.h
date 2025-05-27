@@ -6,7 +6,6 @@
 #include "mc/world/level/BlockPos.h"
 #include "remote_call/api/base/Concepts.h"
 
-#include <concepts>
 
 class Block;
 class Player;
@@ -19,24 +18,24 @@ namespace remote_call {
 
 template <class T>
     requires(std::destructible<T>)
-struct MayUniquePointerType {
+struct MayUniquePtr {
     T const* ptr = nullptr;
     bool     own = false;
 
-    MayUniquePointerType(const MayUniquePointerType&) = delete;
-    MayUniquePointerType(MayUniquePointerType&& o) : ptr(o.ptr), own(o.own) { o.own = false; };
-    MayUniquePointerType& operator=(const MayUniquePointerType&) = delete;
-    MayUniquePointerType& operator=(MayUniquePointerType&& o) {
+    MayUniquePtr(const MayUniquePtr&) = delete;
+    MayUniquePtr(MayUniquePtr&& o) : ptr(o.ptr), own(o.own) { o.own = false; };
+    MayUniquePtr& operator=(const MayUniquePtr&) = delete;
+    MayUniquePtr& operator=(MayUniquePtr&& o) {
         if (own && ptr) delete ptr;
         ptr   = o.ptr;
         own   = o.own;
         o.own = false;
         return *this;
     };
-    MayUniquePointerType(std::unique_ptr<T>&& tag) : ptr(tag.release()), own(true) {};
-    MayUniquePointerType(std::unique_ptr<T> const& tag) : ptr(tag.get()), own(false) {};
-    MayUniquePointerType(T const* ptr) : ptr(ptr), own(false) {};
-    ~MayUniquePointerType() {
+    MayUniquePtr(std::unique_ptr<T>&& tag) : ptr(tag.release()), own(true) {};
+    MayUniquePtr(std::unique_ptr<T> const& tag) : ptr(tag.get()), own(false) {};
+    MayUniquePtr(T const* ptr) : ptr(ptr), own(false) {};
+    ~MayUniquePtr() {
         if (own && ptr) delete ptr;
         own = false;
         ptr = nullptr;
@@ -65,8 +64,8 @@ struct MayUniquePointerType {
     };
 };
 
-struct NbtType : public MayUniquePointerType<CompoundTag> {};
-struct ItemType : public MayUniquePointerType<ItemStack> {};
+struct NbtType : public MayUniquePtr<CompoundTag> {};
+struct ItemType : public MayUniquePtr<ItemStack> {};
 
 struct BlockType {
     Block const* block;
