@@ -177,13 +177,13 @@ inline void testConvert(DynamicValue dv, ll::Expected<> res) {
 template <typename Fn>
 constexpr void exportImportTest(void* any = nullptr) {
     remote_call::exportAs("", "", std::forward<Fn>(*reinterpret_cast<std::decay_t<Fn>>(any)));
-    remote_call::importAs<Fn>("", "");
+    (void)remote_call::importAs<Fn>("", "");
 }
 inline void test111([[maybe_unused]] void* any) {
     exportImportTest<void(Player&)>();
     // remote_call::exportAs("", "", std::forward<void(std::unique_ptr<CompoundTag>&,
     // int)>(*(std::decay_t<void(std::unique_ptr<CompoundTag>&, int)>)any));
-    remote_call::importAs<void(std::unique_ptr<CompoundTag>&, int)>("", "");
+    (void)remote_call::importAs<void(std::unique_ptr<CompoundTag>&, int)>("", "");
 
     // exportImportTest<void(std::unique_ptr<CompoundTag>&, int)>();
     exportImportTest<Player&(Actor*, int, std::string)>();

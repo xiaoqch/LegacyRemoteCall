@@ -12,8 +12,8 @@ interface RecipesApi {
     rows: readonly [string, string, string],
     types: readonly RecipeType[],
     tags: readonly string[],
-    priority: number,
-    assumeSymmetry: boolean
+    priority?: number,
+    assumeSymmetry?: boolean
   ): boolean | undefined;
 }
 
@@ -43,8 +43,7 @@ setTimeout(() => {
     shape,
     types,
     ["crafting_table"],
-    2,
-    true
+    2
   );
   if (result) logger.info("Recipe custom:lse_recipe added");
   else logger.error("Failed to add recipe custom:lse_recipe");

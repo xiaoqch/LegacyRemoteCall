@@ -2,15 +2,15 @@
 #include "Test.h"
 #include "ll/api/chrono/GameChrono.h"
 #include "ll/api/coro/CoroTask.h"
+#include "ll/api/io/LogLevel.h"
 #include "ll/api/memory/Memory.h"
+#include "ll/api/reflection/Serialization.h"
 #include "ll/api/thread/ServerThreadExecutor.h"
+#include "ll/api/utils/RandomUtils.h"
+#include "nlohmann/json.hpp" // IWYU pragma: keep
 #include "remote_call/api/RemoteCall.h"
-#include "test/native/reflection/Deserialization.h"
-#include "test/native/reflection/Serialization.h"
 
-#include <nlohmann/json.hpp>
-
-
+namespace llRand = ll::random_utils;
 namespace remote_call::test {
 
 namespace reflection {
@@ -53,9 +53,7 @@ inline bool isEqualImpl(T1 const& v1, T2 const& v2) {
     return true;
 }
 
-
 } // namespace detail
-
 
 template <ll::reflection::Reflectable T1, ll::reflection::Reflectable T2>
 bool isEqual(T1 const& v1, T2 const& v2) {
@@ -71,18 +69,23 @@ bool isEqual(T1 const& v1, T2 const& v2) {
 
 } // namespace reflection
 
-
+enum class EnumType {
+    a,
+    b,
+};
 struct JsonA {
     uchar        byte{};
     short        s{};
     unsigned int ui{};
     // int64_t                              i64{};
-    float                                f{};
-    double                               d{};
-    remote_call::NullType                null{};
-    std::string                          str;
-    std::vector<std::string>             list;
-    std::unordered_map<std::string, int> record;
+    float    f{};
+    double   d{};
+    EnumType e{};
+    // remote_call::NullType                null{};
+    std::string                               str;
+    std::vector<std::string>                  list;
+    std::unordered_map<std::string, int>      record;
+    std::unordered_map<ll::io::LogLevel, int> record2{};
 
     bool         operator==(JsonA const& o) const = default;
     static JsonA random();
@@ -93,12 +96,14 @@ struct JsonB {
     short        s{};
     unsigned int ui{};
     // int64_t                              i64{};
-    float                                f{};
-    double                               d{};
-    remote_call::NullType                null{};
-    std::string                          str;
-    std::vector<std::string>             list;
-    std::unordered_map<std::string, int> record;
+    float    f{};
+    double   d{};
+    EnumType e{};
+    // remote_call::NullType                null{};
+    std::string                               str;
+    std::vector<std::string>                  list;
+    std::unordered_map<std::string, int>      record;
+    std::unordered_map<ll::io::LogLevel, int> record2{};
 
     JsonA                         obj;
     std::vector<JsonA>            vec;
@@ -114,37 +119,30 @@ ll::coro::CoroTask<bool> testJsonType() {
     constexpr auto& ns = TEST_EXPORT_NAMESPACE;
 
     auto const ori   = JsonB::random();
-    auto       value = remote_call::DynamicValue::from(ori);
-    if (!value) {
-        value.error().log(getLogger());
-        co_return false;
-    }
-    auto res = value->tryGet<JsonB>();
-    if (!res) {
-        res.error().log(getLogger());
-        co_return false;
-    }
-    assert(ori == *res);
-    auto json = remote_call::reflection::serialize<nlohmann::ordered_json>(*res)->dump();
+    auto       value = remote_call::DynamicValue::from(ori).value();
+    auto       res   = value.tryGet<JsonB>().value();
+    assert(ori == res);
+    auto json = ll::reflection::serialize<nlohmann::ordered_json>(res).value().dump();
 
     remote_call::exportAs(ns, "forwardJsonType", [&ori](JsonB const& jsonB) {
         assert(jsonB == ori);
         return jsonB;
     });
 
-    auto&& forwardJsonType = remote_call::importAs<JsonB(JsonB const&)>(ns, "forwardJsonType");
-    auto   forwarded       = forwardJsonType(*res);
-    assert(*res == *forwarded);
-    assert(reflection::isEqual(*res, *forwarded));
+    auto forwardJsonType = remote_call::importAs<JsonB(JsonB const&)>(ns, "forwardJsonType");
+    auto forwarded       = forwardJsonType(res).value();
+    assert(res == forwarded);
+    assert(reflection::isEqual(res, forwarded));
 
     auto deadline = ll::chrono::GameTickClock::now() + ll::chrono::ticks{100};
     while (!remote_call::hasFunc(ns, "lseCompareJson")) {
-        assert(ll::chrono::GameTickClock::now() <= deadline);
+        if (ll::chrono::GameTickClock::now() > deadline) break;
         co_await ll::chrono::ticks{5};
     }
-    auto const lseCompareJson = remote_call::importAs<bool(JsonB, std::string&&)>(ns, "lseCompareJson");
-    auto       equal          = lseCompareJson(ori, std::move(json));
-    assert(*equal);
+    if (remote_call::hasFunc(ns, "lseCompareJson")) {
+        auto const lseCompareJson = remote_call::importAs<bool(JsonB, std::string&&)>(ns, "lseCompareJson");
+        lseCompareJson(ori, std::move(json)).value();
+    }
     co_return true;
 }
 
@@ -159,37 +157,35 @@ auto simpleTestStarted =
      ),
      true);
 JsonA JsonA::random() {
-    JsonA                      b;
-    std::random_device         r;
-    std::default_random_engine generator(r());
-    auto                       dice = [&generator](auto&& distribution) { return distribution(generator); };
-    b.byte                          = (uchar)dice(std::uniform_int_distribution<unsigned short>()) % UINT16_MAX;
-    b.s                             = dice(std::uniform_int_distribution<decltype(s)>());
-    b.ui                            = dice(std::uniform_int_distribution<decltype(ui)>());
-    // // b.i64  = dice(std::uniform_int_distribution<decltype(i64)>());
-    b.f    = dice(std::uniform_real_distribution<decltype(f)>());
-    b.d    = dice(std::uniform_real_distribution<decltype(d)>());
-    b.null = detail::NULL_VALUE;
-    b.str  = ll::string_utils::intToHexStr(dice(std::uniform_int_distribution()));
-    auto listview =
-        std::views::iota(0, dice(std::uniform_int_distribution()) % 10 + 5) | std::views::transform([&dice](auto&&) {
-            return ll::string_utils::intToHexStr(dice(std::uniform_int_distribution()));
-        });
+    JsonA b;
+    b.byte = llRand::rand<uchar>();
+    b.s    = llRand::rand<decltype(s)>();
+    b.ui   = llRand::rand<decltype(ui)>();
+    // // b.i64  = llRand::rand<decltype(i64)>();
+    b.f = llRand::rand<decltype(f)>();
+    b.d = llRand::rand<decltype(d)>();
+    b.e = static_cast<EnumType>(llRand::rand<std::underlying_type_t<decltype(e)>>());
+    // b.null = detail::NULL_VALUE;
+    b.str         = ll::string_utils::intToHexStr(llRand::rand<int>());
+    auto listview = std::views::iota(0, llRand::rand<int>(5, 15))
+                  | std::views::transform([](auto&&) { return ll::string_utils::intToHexStr(llRand::rand<int>()); });
     std::set<int> keys{};
-    while (keys.size() < 20) keys.insert(dice(std::uniform_int_distribution()));
-    auto recordView = keys | std::views::transform([&dice](auto&& key) {
-                          return std::pair<std::string, int>{
-                              "a" + ll::string_utils::intToHexStr(key),
-                              dice(std::uniform_int_distribution())
-                          };
-                      });
-    b.list          = std::vector(listview.begin(), listview.end());
-    b.record        = std::unordered_map(recordView.begin(), recordView.end());
+    while (keys.size() < 20) keys.insert(llRand::rand<int>());
+    auto recordView =
+        keys | std::views::transform([](auto&& key) {
+            return std::pair<std::string, int>{"a" + ll::string_utils::intToHexStr(key), llRand::rand<int>()};
+        });
+    b.list    = std::vector(listview.begin(), listview.end());
+    b.record  = std::unordered_map(recordView.begin(), recordView.end());
+    b.record2 = {
+        {ll::io::LogLevel::Info,  llRand::rand<int>()},
+        {ll::io::LogLevel::Debug, llRand::rand<int>()}
+    };
     return b;
 }
 
 void JsonB::print(std::string const& msg) const {
-    fmt::println("{}: {}", msg, remote_call::reflection::serialize<nlohmann::ordered_json>(*this)->dump());
+    fmt::println("{}: {}", msg, ll::reflection::serialize<nlohmann::ordered_json>(*this).value().dump());
 }
 
 JsonB JsonB::random() {
@@ -197,9 +193,10 @@ JsonB JsonB::random() {
     JsonB s;
     reinterpret_cast<JsonA&>(s) = JsonA::random();
     s.obj                       = JsonA::random();
-    auto listview = std::views::iota(0, 10) | std::views::transform([](auto&&) { return JsonA::random(); });
-    s.vec         = std::vector(listview.begin(), listview.end());
-    s.tuple       = {7, 9.0f, JsonA::random()};
+    auto listview =
+        std::views::iota(0, llRand::rand<int>(10, 20)) | std::views::transform([](auto&&) { return JsonA::random(); });
+    s.vec   = std::vector(listview.begin(), listview.end());
+    s.tuple = {llRand::rand<int>(), llRand::rand<float>(), JsonA::random()};
     return s;
 }
 

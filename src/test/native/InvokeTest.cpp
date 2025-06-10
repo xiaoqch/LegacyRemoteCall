@@ -4,6 +4,7 @@
 #include "ll/api/reflection/Reflection.h"
 #include "ll/api/thread/ServerThreadExecutor.h"
 #include "mc/nbt/CompoundTag.h"
+#include "mc/world/level/BlockPos.h"
 #include "remote_call/api/RemoteCall.h"
 
 
@@ -83,22 +84,21 @@ bool                      testInvocation() {
     {
         std::string funcName = fmt::format("testFunc{}", ++index);
         auto        testFunc = [&]() { result = true; };
-        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
-        importAs<decltype(testFunc)>(ns, funcName)().transform_error(logAndAssert);
+        exportAs(ns, funcName, testFunc).value();
+        importAs<decltype(testFunc)>(ns, funcName)().value();
     }
     {
         std::string funcName = fmt::format("testFunc{}", ++index);
         auto testFunc = [&](Str a1, Str const& a2, Str&& a3) { result = a1 == "a1" && a2 == "a2" && a3 == "a3"; };
-        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
-        importAs<decltype(testFunc)>(ns, funcName)(Str("a1"), Str("a2"), Str("a3")).transform_error(logAndAssert);
+        exportAs(ns, funcName, testFunc).value();
+        importAs<decltype(testFunc)>(ns, funcName)(Str("a1"), Str("a2"), Str("a3")).value();
         assert(success());
     }
     {
-        std::string funcName = fmt::format("testFunc{}", ++index);
-        auto        testFunc = [&](Str a1, Str const& a2, Str&& a3) { return std::tuple{a1, a2, a3}; };
-        exportAs(ns, funcName, std::move(testFunc)).transform_error(logAndAssert);
-        auto res =
-            *importAs<decltype(testFunc)>(ns, funcName)(Str("a1"), Str("a2"), Str("a3")).transform_error(logAndAssert);
+        std::string    funcName = fmt::format("testFunc{}", ++index);
+        constexpr auto testFunc = [](Str a1, Str const& a2, Str&& a3) { return std::tuple{a1, a2, a3}; };
+        exportAs(ns, funcName, std::move(testFunc)).value();
+        auto res = importAs<decltype(testFunc)>(ns, funcName)(Str("a1"), Str("a2"), Str("a3")).value();
         result = std::get<0>(res) == "a1" && std::get<1>(res) == "a2" && std::get<2>(res) == "a3";
         assert(success());
     }
@@ -108,26 +108,25 @@ bool                      testInvocation() {
         struct TestFunc {
             auto operator()(Str a1, Str const& a2, Str&& a3) { return std::tuple{a1, a2, a3}; };
         } testFunc;
-        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
-        auto res = *importAs<TestFunc>(ns, funcName)(Str("a1"), Str("a2"), Str("a3")).transform_error(logAndAssert);
+        exportAs(ns, funcName, testFunc).value();
+        auto res = importAs<TestFunc>(ns, funcName)(Str("a1"), Str("a2"), Str("a3")).value();
         result = std::get<0>(res) == "a1" && std::get<1>(res) == "a2" && std::get<2>(res) == "a3";
         assert(success());
     }
     {
         std::string funcName = fmt::format("testFunc{}", ++index);
-        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
-        auto res =
-            *importAs<decltype(testFunc)>(ns, funcName)(Str("a1"), Str("a2"), Str("a3")).transform_error(logAndAssert);
+        exportAs(ns, funcName, testFunc).value();
+        auto res = importAs<decltype(testFunc)>(ns, funcName)(Str("a1"), Str("a2"), Str("a3")).value();
         result = std::get<0>(res) == "a1" && std::get<1>(res) == "a2" && std::get<2>(res) == "a3";
         assert(success());
     }
     {
         // move only args and return
-        std::string funcName = fmt::format("testFunc{}", ++index);
-        auto        testFunc = [&](Str2&& a1) -> Str2 { return std::move(a1); };
-        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
-        auto res = *importAs<decltype(testFunc)>(ns, funcName)(Str2("a1")).transform_error(logAndAssert);
-        result = res == "a1";
+        std::string    funcName = fmt::format("testFunc{}", ++index);
+        constexpr auto testFunc = [](Str2&& a1) -> Str2 { return std::move(a1); };
+        exportAs(ns, funcName, testFunc).value();
+        auto res = importAs<decltype(testFunc)>(ns, funcName)(Str2("a1")).value();
+        result   = res == "a1";
         assert(success());
     }
     {
@@ -141,9 +140,9 @@ bool                      testInvocation() {
     }
     {
         // args count not match
-        std::string funcName = fmt::format("testFunc{}", ++index);
-        auto        testFunc = [&](Str const& a1) -> Str { return a1; };
-        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
+        std::string    funcName = fmt::format("testFunc{}", ++index);
+        constexpr auto testFunc = [](Str const& a1) -> Str { return a1; };
+        exportAs(ns, funcName, testFunc).value();
         auto res = importAs<Str()>(ns, funcName)();
         assert(!res);
         assert(res.error().isA<error_utils::RemoteCallError>());
@@ -152,9 +151,9 @@ bool                      testInvocation() {
     }
     {
         // args type not match
-        std::string funcName = fmt::format("testFunc{}", ++index);
-        auto        testFunc = [&](Str const& a1) -> Str { return a1; };
-        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
+        std::string    funcName = fmt::format("testFunc{}", ++index);
+        constexpr auto testFunc = [](Str const& a1) -> Str { return a1; };
+        exportAs(ns, funcName, testFunc).value();
         auto res = importAs<Str(int)>(ns, funcName)(7);
         assert(!res);
         assert(res.error().isA<error_utils::RemoteCallError>());
@@ -166,9 +165,9 @@ bool                      testInvocation() {
         // remote_call::WorldPosType. Holding alternative class std::basic_string<char,struct
         // std::char_traits<char>,class std::allocator<char> >. Failed to deserialize value. Field:
         // args[0].node.property.value.pos
-        std::string funcName = fmt::format("testFunc{}", ++index);
-        auto        testFunc = [&](Root const& a1) -> BlockPos { return a1.node.property.value.pos; };
-        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
+        std::string    funcName = fmt::format("testFunc{}", ++index);
+        constexpr auto testFunc = [](Root const& a1) -> BlockPos { return a1.node.property.value.pos; };
+        exportAs(ns, funcName, testFunc).value();
         auto res = importAs<Player*(AnotherRoot const&)>(ns, funcName)({});
         assert(!res);
         auto msg = res.error().message();
@@ -178,19 +177,20 @@ bool                      testInvocation() {
         // getLogger().debug(msg);
     }
     {
-        std::string funcName = fmt::format("testFunc{}", ++index);
-        auto        testFunc = [&](CompoundTag& tag) -> CompoundTag& { return tag; };
-        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
+        std::string    funcName = fmt::format("testFunc{}", ++index);
+        constexpr auto testFunc = [](CompoundTag& tag) -> CompoundTag& { return tag; };
+        exportAs(ns, funcName, testFunc).value();
         auto tag       = std::make_unique<CompoundTag>();
         (*tag)["test"] = "value";
-        CompoundTag& res =
-            *importAs<CompoundTag&(std::unique_ptr<CompoundTag>&)>(ns, funcName)(tag).transform_error(logAndAssert);
+        CompoundTag& res = importAs<CompoundTag&(std::unique_ptr<CompoundTag>&)>(ns, funcName)(tag).value();
         assert(res["test"] == "value");
     }
     {
-        std::string funcName = fmt::format("testFunc{}", ++index);
-        auto testFunc = [&](CompoundTag&) -> ll::Expected<bool> { return ll::makeStringError("TestUnexpected"); };
-        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
+        std::string    funcName = fmt::format("testFunc{}", ++index);
+        constexpr auto testFunc = [](CompoundTag&) -> ll::Expected<bool> {
+            return ll::makeStringError("TestUnexpected");
+        };
+        exportAs(ns, funcName, testFunc).value();
         auto tag       = std::make_unique<CompoundTag>();
         (*tag)["test"] = "value";
         auto res       = importAs<decltype(testFunc)>(ns, funcName)(*tag);
@@ -199,23 +199,59 @@ bool                      testInvocation() {
     }
     {
         // Optional args
-        std::string funcName = fmt::format("testFunc{}", ++index);
-        auto        testFunc = [&](std::optional<std::string> a) -> ll::Expected<std::string> {
+        std::string    funcName = fmt::format("testFunc{}", ++index);
+        constexpr auto testFunc = [](std::optional<std::string> a) -> ll::Expected<std::string> {
             return a.value_or("default");
         };
-        exportAs(ns, funcName, testFunc).transform_error(logAndAssert);
-        auto tag       = std::make_unique<CompoundTag>();
-        (*tag)["test"] = "value";
-        auto res1      = *importAs<std::string()>(ns, funcName)().transform_error(logAndAssert);
+        exportAs(ns, funcName, testFunc).value();
+        auto res1 = importAs<std::string()>(ns, funcName)().value();
         assert(res1 == "default");
-        auto res2 = *importAs<std::string(std::optional<std::string>)>(ns, funcName)(std::nullopt)
-                         .transform_error(logAndAssert);
+        auto res2 = importAs<std::string(std::optional<std::string>)>(ns, funcName)(std::nullopt).value();
         assert(res2 == "default");
-        auto res3 = *importAs<std::string(std::optional<std::string>)>(ns, funcName)(std::make_optional("value"))
-                         .transform_error(logAndAssert);
+        auto res3 =
+            importAs<std::string(std::optional<std::string>)>(ns, funcName)(std::make_optional("value")).value();
         assert(res3 == "value");
-        auto res4 = *importAs<std::string(std::string const&)>(ns, funcName)("value").transform_error(logAndAssert);
+        auto res4 = importAs<std::string(std::string const&)>(ns, funcName)("value").value();
         assert(res4 == "value");
+    }
+    {
+        // Optional args
+        std::string    funcName = fmt::format("testFunc{}", ++index);
+        constexpr auto testFunc = [](int x, std::optional<int> y, int z) -> ll::Expected<BlockPos> {
+            return BlockPos{x, y.value_or(2), z};
+        };
+        exportAs(ns, funcName, testFunc, 3).value();
+        auto res1 = importAs<BlockPos(int, int)>(ns, funcName)(11, 12).value();
+        assert(res1 == BlockPos(11, 12, 3));
+        auto res2 = importAs<BlockPos(int)>(ns, funcName)(11).value();
+        assert(res2 == BlockPos(11, 2, 3));
+        auto res3 = importAs<BlockPos(int, std::optional<int>, std::optional<int>)>(ns, funcName)(11, {}, {}).value();
+        assert(res3 == BlockPos(11, 2, 3));
+        auto res4 = importAs<BlockPos(int, std::optional<int>, std::optional<int>)>(ns, funcName)(11, {}, 13).value();
+        assert(res4 == BlockPos(11, 2, 13));
+    }
+    {
+        // ExportEx
+        std::string    funcName = fmt::format("testFunc{}", ++index);
+        constexpr auto testFunc = [](int x, std::optional<int> y, int z = 3) -> ll::Expected<BlockPos> {
+            return BlockPos{x, y.value_or(2), z};
+        };
+        if (false) {
+            REMOTE_CALL_EXPORT_EX(ns, funcName, testFunc).value();
+        } else {
+            constexpr auto testFuncWrapper = [](auto&&... args) -> auto
+                requires requires() { testFunc(std::forward<decltype(args)>(args)...); }
+            { return testFunc(std::forward<decltype(args)>(args)...); };
+            exportEx<decltype(testFunc)>(ns, funcName, testFuncWrapper).value();
+        }
+        auto res1 = importAs<BlockPos(int, int)>(ns, funcName)(11, 12).value();
+        assert(res1 == BlockPos(11, 12, 3));
+        auto res2 = importAs<BlockPos(int)>(ns, funcName)(11).value();
+        assert(res2 == BlockPos(11, 2, 3));
+        auto res3 = importAs<BlockPos(int, std::optional<int>, std::optional<int>)>(ns, funcName)(11, {}, {}).value();
+        assert(res3 == BlockPos(11, 2, 3));
+        auto res4 = importAs<BlockPos(int, std::optional<int>, std::optional<int>)>(ns, funcName)(11, {}, 13).value();
+        assert(res4 == BlockPos(11, 2, 13));
     }
     {
         std::string funcName = fmt::format("testFunc{}", ++index);
@@ -224,7 +260,7 @@ bool                      testInvocation() {
         exportAs(ns, funcName, testFunc);
         ll::thread::ServerThreadExecutor::getDefault().executeAfter(
             [ns, funcName] {
-                auto str = *importAs<Str()>(ns, funcName)().transform_error(logAndAssert);
+                auto str = importAs<Str()>(ns, funcName)().value();
                 assert(str == "abcdefghijklmnopqrstuvwxyz");
             },
             ll::chrono::ticks{20}

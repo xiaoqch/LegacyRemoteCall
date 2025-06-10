@@ -72,6 +72,7 @@ fromDynamic(remote_call::DynamicValue& dv, std::in_place_type_t<Recipes::Type>, 
     // TempRecipesType tmp{};
     // return dv.getTo(tmp).transform([&]() { return static_cast<Recipes::Type>(tmp); });
 }
+
 // Function
 ll::Expected<bool> addShapeRecipe(
     ::std::string const&                 recipeId,
@@ -79,15 +80,15 @@ ll::Expected<bool> addShapeRecipe(
     ::std::vector<::std::string> const&  rows,
     ::std::vector<Recipes::Type> const&  types,
     ::std::vector<::HashedString> const& tags,
-    int                                  priority,
+    int                                  priority = 2,
     // ::RecipeUnlockingRequirement const&   unlockingReq,
     // ::SemVersion const&                   formatVersion,
-    bool assumeSymmetry
+    bool assumeSymmetry = true
 ) {
     // auto& recipes2 = ll::service::getLevel()->getRecipes();
-    auto&                      recipes = ll::service::getLevel()->getRecipes();
-    SemVersion                 ver;
-    RecipeUnlockingRequirement req;
+    auto&                                   recipes = ll::service::getLevel()->getRecipes();
+    ::ll::TypedStorage<8, 24, ::SemVersion> ver{};
+    RecipeUnlockingRequirement              req;
     try {
         recipes.addShapedRecipe(recipeId, result, rows, types, tags, priority, {}, req, ver, assumeSymmetry);
 
@@ -96,7 +97,7 @@ ll::Expected<bool> addShapeRecipe(
         for (auto& tag : tags) {
             if (!map.contains(tag) || !map.at(tag).contains(key)) {
                 return ll::makeStringError(fmt::format(
-                    "Unknown Error occurred. Recipe with id '{}' and tag '{}' not found",
+                    "Unknown Error occurred. Recipe with id '{}' and tag '{}' not be found",
                     recipeId,
                     tag.getString()
                 ));
@@ -112,7 +113,7 @@ ll::Expected<bool> addShapeRecipe(
 
 ll::Expected<> exportApi() {
     ll::Expected<> res;
-    if (res) res = remote_call::exportAs("RecipesApi", "addShapeRecipe", addShapeRecipe);
+    if (res) res = REMOTE_CALL_EXPORT_EX("RecipesApi", "addShapeRecipe", addShapeRecipe);
     return res;
 }
 

@@ -1,6 +1,32 @@
 import "./example.js";
 import { mkdirSync, writeFileSync } from "fs";
 
+declare global {
+  namespace ll {
+    const pluginsRoot: string;
+    function getCurrentPluginInfo(): Plugin;
+  }
+}
+// success or hasValue?
+interface ExpectedValue<T> {
+  success: true;
+  value: T;
+}
+interface Unexpected<U = string> {
+  success: false;
+  error: U;
+}
+type Expected<T, U = string> = ExpectedValue<T> | Unexpected<U>;
+
+function getValue<T, U>(expected: Expected<T, U>): T {
+  if (expected.success) {
+    return expected.value;
+  } else {
+    if (typeof expected.error == "string") throw new Error(expected.error);
+    else throw expected.error;
+  }
+}
+
 const TEST_EXPORT_NAMESPACE = "RemoteCallTest";
 
 logger.info("Start RemoteCall Test for LegacyScriptEngine");
@@ -42,8 +68,7 @@ function deepEqual(obj1: any, obj2: any): boolean {
 
 ll.exports((val) => val, "lse-test", "lseForwardValue");
 const lseForwardValue = ll.imports("lse-test", "lseForwardValue");
-
-const dataDir = "plugins/lse-test/data/";
+const dataDir = `${ll.pluginsRoot}/${ll.getCurrentPluginInfo().name}/data`;
 mkdirSync(dataDir, { recursive: true });
 ll.exports(
   (data: {}, jsonStr: string) => {

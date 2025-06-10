@@ -394,7 +394,7 @@ inline ll::Expected<> exportEx(std::string const& nameSpace, std::string const& 
 }
 
 #define REMOTE_CALL_EXPORT_EX(nameSpace, funcName, fn)                                                                 \
-    exportEx<decltype(fn)>(                                                                                            \
+    ::remote_call::exportEx<decltype(fn)>(                                                                             \
         nameSpace,                                                                                                     \
         funcName,                                                                                                      \
         [](auto&&... args) -> auto                                                                                     \

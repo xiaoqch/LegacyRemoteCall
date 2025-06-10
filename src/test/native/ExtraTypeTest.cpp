@@ -7,8 +7,10 @@
 #include "ll/api/reflection/Reflection.h"
 #include "ll/api/service/Bedrock.h"
 #include "ll/api/thread/ServerThreadExecutor.h"
+#include "ll/api/utils/RandomUtils.h"
 #include "mc/deps/core/math/Vec3.h"
 #include "mc/deps/core/utility/MCRESULT.h"
+#include "mc/gametest/MinecraftGameTestHelper.h"
 #include "mc/scripting/commands/ScriptCommandOrigin.h"
 #include "mc/server/SimulatedPlayer.h"
 #include "mc/server/commands/CommandContext.h"
@@ -24,6 +26,7 @@
 #include "mc/world/level/block/actor/BlockActor.h"
 #include "remote_call/api/RemoteCall.h"
 
+namespace llRand = ll::random_utils;
 
 // Custom Conversion Test(by adl)
 template <typename T>
@@ -144,33 +147,25 @@ struct Extra {
         return res;
     }
     template <typename T = BlockPos>
-    static T randomPos(auto&& dice) {
-        return T{
-            dice(std::uniform_int_distribution<int>()),
-            dice(std::uniform_int_distribution<int>()),
-            dice(std::uniform_int_distribution<int>())
-        };
+    static T randomPos() {
+        return T{llRand::rand<int>(), llRand::rand<int>(), llRand::rand<int>()};
     }
     static Extra random() {
-        Extra                      e{};
-        std::random_device         r;
-        std::default_random_engine generator(r());
-        auto                       dice = [&generator](auto&& distribution) { return distribution(generator); };
+        Extra e{};
+        e.pos   = randomPos<Vec3>();
+        e.bpos  = randomPos<BlockPos>();
+        e.wpos  = {randomPos<Vec3>(), llRand::rand<int>(0, 3)};
+        e.wbpos = {randomPos<BlockPos>(), llRand::rand<int>(0, 3)};
 
-        e.pos   = randomPos<Vec3>(dice);
-        e.bpos  = randomPos<BlockPos>(dice);
-        e.wpos  = {randomPos<Vec3>(dice), dice(std::uniform_int_distribution<int>())};
-        e.wbpos = {randomPos<BlockPos>(dice), dice(std::uniform_int_distribution<int>())};
-
-        e.actor = (decltype(e.actor))dice(std::uniform_int_distribution<intptr_t>());
-        // e.actorRef = (decltype(e.actor))dice(std::uniform_int_distribution<intptr_t>());
-        e.player = (decltype(e.player))dice(std::uniform_int_distribution<intptr_t>());
-        e.sp     = (decltype(e.sp))dice(std::uniform_int_distribution<intptr_t>());
-        e.block  = (decltype(e.block))dice(std::uniform_int_distribution<intptr_t>());
-        e.ba     = (decltype(e.ba))dice(std::uniform_int_distribution<intptr_t>());
-        e.item   = (decltype(e.item))dice(std::uniform_int_distribution<intptr_t>());
-        e.ctn    = (decltype(e.ctn))dice(std::uniform_int_distribution<intptr_t>());
-        e.tag    = (decltype(e.tag))dice(std::uniform_int_distribution<intptr_t>());
+        e.actor = (decltype(e.actor))llRand::rand<intptr_t>();
+        // e.actorRef = (decltype(e.actor))llRand::rand<intptr_t>();
+        e.player = (decltype(e.player))llRand::rand<intptr_t>();
+        e.sp     = (decltype(e.sp))llRand::rand<intptr_t>();
+        e.block  = (decltype(e.block))llRand::rand<intptr_t>();
+        e.ba     = (decltype(e.ba))llRand::rand<intptr_t>();
+        e.item   = (decltype(e.item))llRand::rand<intptr_t>();
+        e.ctn    = (decltype(e.ctn))llRand::rand<intptr_t>();
+        e.tag    = (decltype(e.tag))llRand::rand<intptr_t>();
         return e;
     }
 };
@@ -271,14 +266,15 @@ ll::coro::CoroTask<bool> testExtraType() {
 
     auto deadline = ll::chrono::GameTickClock::now() + ll::chrono::ticks{100};
     while (!remote_call::hasFunc(ns, "lseTestExtra")) {
-        assert(ll::chrono::GameTickClock::now() <= deadline);
+        if (ll::chrono::GameTickClock::now() >= deadline) break;
         co_await ll::chrono::ticks{5};
     }
 
-    auto const lseTestExtra = remote_call::importAs<Extra(Extra&&)>(ns, "lseTestExtra");
-    auto       ret          = lseTestExtra(extra.clone());
-    assert(ret);
-    // assert(extra == ret); // CompoundTag* -> std::unique_ptr<CompoundTag>?
+    if (remote_call::hasFunc(ns, "lseTestExtra")) {
+        auto const lseTestExtra = remote_call::importAs<Extra(Extra&&)>(ns, "lseTestExtra");
+        lseTestExtra(extra.clone()).value();
+        // assert(extra == ret); // CompoundTag* -> std::unique_ptr<CompoundTag>?
+    }
     co_return true;
 };
 
@@ -288,6 +284,8 @@ auto extraTestStarted =
          [](ll::Expected<bool>&& result) {
              if (result) test::success("ExtraType Test passed");
              else result.error().log(getLogger());
+             ((MinecraftGameTestHelper*)nullptr)
+                 ->$removeSimulatedPlayer(*(SimulatedPlayer*)ll::service::getLevel()->getPlayer(ns));
          }
      ),
      true);

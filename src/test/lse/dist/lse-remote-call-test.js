@@ -1,5 +1,16 @@
 import "./example.js";
 import { mkdirSync, writeFileSync } from "fs";
+function getValue(expected) {
+    if (expected.success) {
+        return expected.value;
+    }
+    else {
+        if (typeof expected.error == "string")
+            throw new Error(expected.error);
+        else
+            throw expected.error;
+    }
+}
 const TEST_EXPORT_NAMESPACE = "RemoteCallTest";
 logger.info("Start RemoteCall Test for LegacyScriptEngine");
 function deepEqual(obj1, obj2) {
@@ -32,7 +43,7 @@ function deepEqual(obj1, obj2) {
 }
 ll.exports((val) => val, "lse-test", "lseForwardValue");
 const lseForwardValue = ll.imports("lse-test", "lseForwardValue");
-const dataDir = "plugins/lse-test/data/";
+const dataDir = `${ll.pluginsRoot}/${ll.getCurrentPluginInfo().name}/data`;
 mkdirSync(dataDir, { recursive: true });
 ll.exports((data, jsonStr) => {
     try {

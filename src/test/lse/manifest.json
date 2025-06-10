@@ -7,6 +7,9 @@
   "dependencies": [
     {
       "name": "legacy-script-engine-nodejs"
+    },
+    {
+      "name": "LegacyRemoteCall"
     }
   ],
   "author": "LiteLDev"
