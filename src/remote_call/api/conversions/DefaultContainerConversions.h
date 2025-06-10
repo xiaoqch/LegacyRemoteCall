@@ -11,6 +11,7 @@
 #include "remote_call/api/conversions/AdlSerializer.h"
 #include "remote_call/api/reflection/Reflection.h"
 #include "remote_call/api/utils/ErrorUtils.h"
+#include "remote_call/api/value/Base.h"
 #include "remote_call/api/value/DynamicValue.h"
 
 
@@ -21,7 +22,7 @@ template <typename T>
     requires(ll::concepts::IsOptional<std::remove_cvref_t<T>> && concepts::SupportToDynamic<typename std::remove_cvref_t<T>::value_type>)
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::HightTag) {
     if (t.has_value()) return ::remote_call::toDynamic(dv, *std::forward<T>(t));
-    else dv.emplace<ElementType>(NULL_VALUE);
+    else dv.emplace<NullType>(NULL_VALUE);
     return {};
 }
 template <ll::concepts::IsOptional T>
@@ -110,28 +111,28 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& tuple, ll::meta::Priority
     return res;
 }
 template <typename Tpl, size_t... I>
-ll::Expected<Tpl> fromDynamicTupleImpl(DynamicValue& dv, std::in_place_type_t<Tpl>, std::index_sequence<I...>) {
+ll::Expected<Tpl> fromDynamicTupleImpl(DynamicValue& dv, std::index_sequence<I...>) {
     ll::Expected<> res;
     constexpr auto getElement =
-        []<size_t Idx, typename ElementType>(DynamicValue& dv, ll::Expected<>& res) -> std::optional<ElementType> {
+        []<size_t Idx, typename TupleElement>(DynamicValue& dv, ll::Expected<>& res) -> std::optional<TupleElement> {
         if (!res) return std::nullopt;
         if (dv.size() > Idx) {
-            if constexpr (requires() { dv[Idx].template tryGet<ElementType>(res); }) {
-                auto opt = dv[Idx].template tryGet<ElementType>(res);
+            if constexpr (requires() { dv[Idx].template tryGet<TupleElement>(res); }) {
+                auto opt = dv[Idx].template tryGet<TupleElement>(res);
                 if (!res) res = error_utils::makeSerIndexError(Idx, res.error());
                 return opt;
             } else {
                 __debugbreak();
-                static_assert(ll::traits::always_false<ElementType>, "this type can't deserialize");
+                static_assert(ll::traits::always_false<TupleElement>, "this type can't deserialize");
             }
         } else {
-            if constexpr (!ll::concepts::IsOptional<ElementType>) {
+            if constexpr (!ll::concepts::IsOptional<TupleElement>) {
                 res = error_utils::makeError(
                     error_utils::ErrorReason::IndexOutOfRange,
                     fmt::format("index \"{}\" outof range", Idx)
                 );
             } else {
-                return std::make_optional<ElementType>(std::nullopt);
+                return std::make_optional<TupleElement>(std::nullopt);
             }
         }
         if (!res) res = error_utils::makeSerIndexError(Idx, res.error());
@@ -146,12 +147,8 @@ static_assert(std::same_as<std::tuple_element_t<5, std::array<int, 11>>, int>);
 template <concepts::IsTupleLike T>
     requires(!std::is_default_constructible_v<T>)
 ll::Expected<T> fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, ll::meta::PriorityTag<2>) {
-    ll::Expected<> res{};
-    return fromDynamicTupleImpl(
-        dv,
-        std::in_place_type<std::decay_t<T>>,
-        std::make_index_sequence<std::tuple_size_v<std::decay_t<T>>>{}
-    );
+    using TupleType = std::decay_t<T>;
+    return fromDynamicTupleImpl<TupleType>(dv, std::make_index_sequence<std::tuple_size_v<TupleType>>{});
 }
 
 static_assert(!ll::concepts::ArrayLike<std::tuple<int>>);
@@ -329,7 +326,7 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& obj, ll::meta::PriorityTa
 template <typename Obj, typename... T, size_t... N>
     requires(sizeof...(T) == sizeof...(N))
 ll::Expected<Obj>
-fromDynamicReflectableImpl(DynamicValue& dv, std::in_place_type_t<Obj>, std::in_place_type_t<std::tuple<T...>>, std::index_sequence<N...>) {
+fromDynamicReflectableImpl(DynamicValue& dv, std::in_place_type_t<boost::pfr::detail::sequence_tuple::tuple<T&...>>, std::index_sequence<N...>) {
     ll::Expected<> res;
     const auto     getMember =
         [&]<size_t I, typename MemberType>(std::in_place_index_t<I>, std::in_place_type_t<MemberType>)
@@ -367,35 +364,9 @@ template <ll::reflection::Reflectable T>
     requires(!std::is_default_constructible_v<T>)
 ll::Expected<T> fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, ll::meta::PriorityTag<1>) {
     if (!dv.is_object()) return error_utils::makeFromDynamicTypeError<T, ObjectType>(dv);
-    ll::Expected<>   res{};
     constexpr size_t size = ll::reflection::member_count_v<T>;
-    using TupleType       = std::decay_t<decltype(boost::pfr::structure_to_tuple(std::declval<T>()))>;
-    return fromDynamicReflectableImpl(
-        dv,
-        std::in_place_type<T>,
-        std::in_place_type<TupleType>,
-        std::make_index_sequence<size>{}
-    );
-}
-
-// enum
-template <class T>
-    requires(std::is_enum_v<std::remove_cvref_t<T>>)
-inline ll::Expected<> toDynamic(DynamicValue& dv, T&& e, ll::meta::PriorityTag<1>) {
-    dv = magic_enum::enum_name(std::forward<T>(e));
-    return {};
-}
-template <ll::concepts::Require<std::is_enum> T>
-inline ll::Expected<> fromDynamic(DynamicValue& dv, T& e, ll::meta::PriorityTag<1>) {
-    using enum_type = std::remove_cvref_t<T>;
-    if (dv.is_string()) {
-        e = magic_enum::enum_cast<enum_type>(std::string{dv}).value();
-    } else if (dv.is_number()) {
-        e = magic_enum::enum_cast<enum_type>(dv.get<NumberType>().get<std::underlying_type_t<enum_type>>()).value();
-    } else {
-        return error_utils::makeFromDynamicTypeError<T, std::string, NumberType>(dv);
-    }
-    return {};
+    using TupleType       = std::decay_t<decltype(boost::pfr::detail::tie_as_tuple(std::declval<T&>()))>;
+    return fromDynamicReflectableImpl<T>(dv, std::in_place_type<TupleType>, std::make_index_sequence<size>{});
 }
 
 #if false
@@ -419,7 +390,7 @@ template <concepts::IsOptionalRef T>
     requires(concepts::SupportFromDynamic<decltype(std::declval<T>().as_ptr())>)
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::LowTag) {
     if (t.has_value()) return ::remote_call::toDynamic(dv, std::forward<T>(t).as_ptr());
-    else dv.emplace<ElementType>(NullValue);
+    else dv.emplace<NullType>(NullValue);
     return {};
 }
 template <concepts::IsOptionalRef T>
@@ -435,6 +406,7 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::DefaultTag) 
         return res;
     }
 }
+
 #endif
 
 } // namespace remote_call::detail

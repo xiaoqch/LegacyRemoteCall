@@ -2,8 +2,11 @@
 
 #include "ll/api/Expected.h"
 #include "ll/api/base/Concepts.h"
+#include "magic_enum.hpp"
+#include "magic_enum_flags.hpp"
 #include "mc/server/SimulatedPlayer.h"
 #include "mc/world/Container.h"
+#include "mc/world/actor/player/Player.h"
 #include "mc/world/item/ItemStack.h"
 #include "mc/world/level/block/Block.h"
 #include "mc/world/level/block/actor/BlockActor.h"
@@ -23,11 +26,11 @@ template <typename T>
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::HightTag) {
     if constexpr (std::is_pointer_v<std::decay_t<T>>) {
         if (t == nullptr) {
-            dv.emplace<ElementType>(NULL_VALUE);
+            dv.emplace<NullType>(NULL_VALUE);
             return {};
         }
     }
-    dv.emplace<ElementType>(std::forward<T>(t));
+    dv.emplace<std::decay_t<T>>(std::forward<T>(t));
     return {};
 }
 template <concepts::IsNormalElement T>
@@ -38,16 +41,18 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
             return {};
         }
     }
-    if (dv.hold<T>()) t = dv.get<T>();
-    else return error_utils::makeFromDynamicTypeError<T, T>(dv);
-    return {};
+    if (dv.hold<T>()) {
+        t = dv.get<T>();
+        return {};
+    }
+    return error_utils::makeFromDynamicTypeError<T, T>(dv);
 }
 
 // String like
 template <concepts::IsString T>
     requires(!concepts::IsValueElement<std::decay_t<T>>)
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::LowTag) {
-    dv.emplace<ElementType>(std::string{std::forward<T>(t)});
+    dv.emplace<std::string>(std::forward<T>(t));
     return {};
 }
 template <concepts::IsString T>
@@ -58,35 +63,36 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::LowTag) {
     return {};
 }
 
-namespace detail {
-
-template <typename NativeType, typename V>
-    requires(concepts::IsCustomElement<std::decay_t<V>> && concepts::CompatibleWithCustomElement<NativeType, V>)
+// NbtType, BlockType, ItemType, NumberType
+template <typename NativeType, typename DynType>
+    requires(concepts::IsCustomElement<std::decay_t<DynType>> && concepts::CompatibleWithCustomElement<NativeType, DynType>)
 struct CustomElementConverter {
 public:
     template <typename T = NativeType>
     static inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t)
         requires(!IsUniquePtr<std::decay_t<T>>)
     {
-        dv.emplace<ElementType>(V(std::forward<T>(t)));
+        dv.emplace<DynType>(std::forward<T>(t));
         return {};
     };
     template <typename T = NativeType>
     static inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t)
         requires(IsUniquePtr<std::decay_t<T>>)
     {
-        dv.emplace<ElementType>(V(std::forward<T>(t)));
+        dv.emplace<DynType>(std::forward<T>(t));
         return {};
     };
     template <typename T = NativeType>
     static inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t) {
-        if (dv.hold<V>()) t = static_cast<T>(std::forward<T>(dv.get<V>().template get<T>()));
-        else return error_utils::makeFromDynamicTypeError<T, V>(dv);
+        if (!dv.hold<DynType>()) {
+            return error_utils::makeFromDynamicTypeError<T, DynType>(dv);
+        }
+        t = dv.get<DynType>().template get<T>();
         return {};
     };
 };
 
-#define COMPACT_TYPE_CONVERTER(TYPE)                                                                                   \
+#define COMPATIBLE_TYPE_CONVERTER(TYPE)                                                                                \
     template <concepts::CompatibleWithCustomElement<TYPE> T>                                                           \
         requires(!ll::concepts::IsOneOf<T, AllElementTypes>)                                                           \
     inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::DefaultTag) {                                   \
@@ -98,23 +104,19 @@ public:
         return detail::CustomElementConverter<std::decay_t<T>, TYPE>::fromDynamic(dv, t);                              \
     }
 
-} // namespace detail
-
-COMPACT_TYPE_CONVERTER(NbtType);
-COMPACT_TYPE_CONVERTER(BlockType);
-COMPACT_TYPE_CONVERTER(ItemType);
-COMPACT_TYPE_CONVERTER(NumberType);
-// COMPACT_TYPE_CONVERTER(BlockPosType);
-// COMPACT_TYPE_CONVERTER(WorldPosType);
+COMPATIBLE_TYPE_CONVERTER(NbtType);
+COMPATIBLE_TYPE_CONVERTER(BlockType);
+COMPATIBLE_TYPE_CONVERTER(ItemType);
+COMPATIBLE_TYPE_CONVERTER(NumberType);
+// COMPATIBLE_TYPE_CONVERTER(BlockPosType);
+// COMPATIBLE_TYPE_CONVERTER(WorldPosType);
 
 // Actor*, Player*...
 template <std::convertible_to<Actor const*> T>
     requires(!concepts::IsValueElement<std::decay_t<T>>)
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::DefaultTag) {
-    if constexpr (!std::convertible_to<T, Player const*>)
-        dv.template emplace<ElementType>(const_cast<Actor*>(static_cast<Actor const*>(std::forward<decltype(t)>(t))));
-    else
-        dv.template emplace<ElementType>(const_cast<Player*>(static_cast<Player const*>(std::forward<decltype(t)>(t))));
+    using PtrType = std::conditional_t<std::convertible_to<T, Player const*>, Player, Actor>;
+    dv.template emplace<PtrType*>(const_cast<PtrType*>(static_cast<PtrType const*>(std::forward<decltype(t)>(t))));
     return {};
 }
 
@@ -122,19 +124,20 @@ template <std::convertible_to<Actor const*> T>
     requires(!concepts::IsValueElement<T>)
 inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::DefaultTag) {
     if constexpr (std::convertible_to<T, Player const*>) {
-        if (dv.hold<Player*>()) {
-            auto ptr = dv.get<Player*>();
-            if constexpr (std::convertible_to<T, SimulatedPlayer const*>) {
-                if (ptr && !ptr->isSimulatedPlayer()) return ll::makeStringError("Player is not SimulatedPlayer");
-            }
-            t = reinterpret_cast<T>(ptr);
-            return {};
-        } else {
+        if (!dv.hold<Player*>()) {
             return error_utils::makeFromDynamicTypeError<T, Player*>(dv);
         }
+        auto ptr = dv.get<Player*>();
+        if constexpr (std::convertible_to<T, SimulatedPlayer const*>) {
+            if (ptr && !ptr->isSimulatedPlayer()) return ll::makeStringError("Player is not SimulatedPlayer");
+        }
+        t = reinterpret_cast<T>(ptr);
+        return {};
     } else if constexpr (std::convertible_to<Actor*, T>) {
-        if (dv.hold<Actor*>()) t = dv.get<Actor*>();
-        else return error_utils::makeFromDynamicTypeError<T, Actor*>(dv);
+        if (!dv.hold<Actor*>()) {
+            return error_utils::makeFromDynamicTypeError<T, Actor*>(dv);
+        }
+        t = dv.get<Actor*>();
         return {};
     } else {
         static_assert(false, "Unsafety convert from value to Entity");
@@ -144,9 +147,11 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::DefaultTag) 
 // BlockPod, Vec3
 template <concepts::IsPos T>
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::HightTag) {
-    dv.emplace<ElementType>(std::forward<T>(t));
+    using DynPosType = std::conditional_t<std::same_as<std::remove_cvref_t<T>, BlockPos>, BlockPosType, WorldPosType>;
+    dv.emplace<DynPosType>(std::forward<T>(t));
     return {};
 }
+
 template <concepts::IsPos T>
 inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
     if (dv.hold<BlockPosType>()) {
@@ -169,11 +174,9 @@ template <concepts::IsTupleLike Pos>
         { std::get<1>(pos) } -> std::convertible_to<int>;
     } )
 inline ll::Expected<> toDynamic(DynamicValue& dv, Pos&& t, priority::DefaultTag) {
-    using PosType = decltype(std::get<0>(std::forward<Pos>(t)));
-    dv.emplace<ElementType>(std::pair<std::decay_t<PosType>, int>{
-        std::get<0>(std::forward<Pos>(t)),
-        static_cast<int>(std::get<1>(std::forward<Pos>(t)))
-    });
+    using PosType    = std::decay_t<decltype(std::get<0>(std::forward<Pos>(t)))>;
+    using DynPosType = std::conditional_t<std::same_as<PosType, BlockPos>, BlockPosType, WorldPosType>;
+    dv.emplace<DynPosType>(std::get<0>(std::forward<Pos>(t)), static_cast<int>(std::get<1>(std::forward<Pos>(t))));
     return {};
 }
 template <typename Pos>
@@ -233,12 +236,70 @@ fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, priority::LowTag) {
     );
 }
 
+// enum
+template <class T>
+    requires(std::is_enum_v<std::remove_cvref_t<T>>)
+inline ll::Expected<> toDynamicEnumName(DynamicValue& dv, T&& e, ll::meta::PriorityTag<1>) {
+    using EnumType = std::remove_cvref_t<T>;
+    std::string_view name{};
+    if constexpr (magic_enum::detail::subtype_v<EnumType> == magic_enum::detail::enum_subtype::flags) {
+        name = magic_enum::enum_flags_name<EnumType>(e);
+    } else {
+        name = magic_enum::enum_name<EnumType>(e);
+    }
+    if (name.empty()) {
+        return error_utils::makeUnsupportedValueError<T, std::string>(
+            std::to_string(static_cast<std::underlying_type_t<EnumType>>(e)),
+            "can not get enum name"
+        );
+    }
+    dv.emplace<std::string>(name);
+    return {};
+}
+
+template <class T>
+    requires(std::is_enum_v<std::remove_cvref_t<T>>)
+inline ll::Expected<> toDynamic(DynamicValue& dv, T&& e, ll::meta::PriorityTag<1>) {
+    dv.emplace<NumberType>(static_cast<std::underlying_type_t<std::remove_cvref_t<T>>>(e));
+    return {};
+}
+
+template <ll::concepts::Require<std::is_enum> T>
+inline ll::Expected<> fromDynamicEnumName(std::string& dv, T& e) {
+    using EnumType = std::remove_cvref_t<T>;
+    std::optional<EnumType> res;
+    if constexpr (magic_enum::detail::subtype_v<EnumType> == magic_enum::detail::enum_subtype::flags) {
+        res = magic_enum::enum_flags_cast<EnumType>(dv);
+    } else {
+        res = magic_enum::enum_cast<EnumType>(dv);
+    }
+    if (!res) return error_utils::makeUnsupportedValueError<std::string, T>(dv, "can not cast to enum");
+    e = *res;
+    return {};
+}
+
+template <ll::concepts::Require<std::is_enum> T>
+inline ll::Expected<> fromDynamic(DynamicValue& dv, T& e, ll::meta::PriorityTag<1>) {
+    using EnumType = std::remove_cvref_t<T>;
+    if constexpr (magic_enum::detail::is_reflected_v<EnumType, magic_enum::detail::subtype_v<EnumType>>) {
+        if (dv.is_string()) {
+            return fromDynamicEnumName(dv.get<std::string>(), e);
+        }
+    }
+    if (dv.is_number()) {
+        e = static_cast<EnumType>(dv.get<NumberType>().get<std::underlying_type_t<EnumType>>());
+    } else {
+        return error_utils::makeFromDynamicTypeError<T, std::string, NumberType>(dv);
+    }
+    return {};
+}
+
 // Block*
 template <typename T>
     requires(std::same_as<std::decay_t<T>, Block*>)
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::PriorityTag<1>) {
     // static_assert(false, "'Block*' is unsupported type, use 'Block const*' instead.");
-    dv.emplace<ElementType>(const_cast<Block*>(t));
+    dv.emplace<BlockType>(const_cast<Block*>(t));
     return {};
 }
 

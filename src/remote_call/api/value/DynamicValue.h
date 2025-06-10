@@ -73,8 +73,17 @@ struct DynamicValue : public detail::DynamicBase<DynamicValue> {
     //     return std::forward<T>(v);
     // }
 
-    static inline DynamicValue object() { return DynamicValue{ObjectType{}}; }
-    static inline DynamicValue array() { return DynamicValue{ArrayType{}}; }
+    template <ll::concepts::IsOneOf<AllElementTypes> T, class... Args>
+    constexpr T& emplace(Args&&... val) {
+        return BaseType::emplace<ElementType>().template emplace<T>(std::forward<Args>(val)...);
+    }
+    template <ll::concepts::IsOneOf<ElementType, ArrayType, ObjectType> T, class... Args>
+    constexpr T& emplace(Args&&... val) {
+        return BaseType::emplace<T>(std::forward<Args>(val)...);
+    }
+
+    [[nodiscard]] inline static DynamicValue object() { return DynamicValue{ObjectType{}}; }
+    [[nodiscard]] inline static DynamicValue array() { return DynamicValue{ArrayType{}}; }
 
     template <IsAnyDynamicElement T>
     [[nodiscard]] inline bool hold() const noexcept {

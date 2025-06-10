@@ -8,21 +8,21 @@ namespace remote_call {
 template <typename ValueType>
 struct AdlSerializer {
     template <typename TargetType = ValueType>
-    static inline auto
+    [[nodiscard]] inline static auto
     fromDynamic(DynamicValue& dv, TargetType& val) noexcept(noexcept(::remote_call::fromDynamic(dv, val)))
         -> decltype(::remote_call::fromDynamic(dv, val)) {
         return ::remote_call::fromDynamic(dv, val);
     }
 
     template <typename TargetType = ValueType>
-    static inline auto fromDynamic(DynamicValue& dv
+    [[nodiscard]] inline static auto fromDynamic(DynamicValue& dv
     ) noexcept(noexcept(::remote_call::fromDynamic(dv, std::in_place_type<TargetType>)))
         -> decltype(::remote_call::fromDynamic(dv, std::in_place_type<TargetType>)) {
         return ::remote_call::fromDynamic(dv, std::in_place_type<TargetType>);
     }
 
     template <typename TargetType = ValueType>
-    static inline auto toDynamic(DynamicValue& dv, TargetType&& val) noexcept(
+    [[nodiscard]] inline static auto toDynamic(DynamicValue& dv, TargetType&& val) noexcept(
         noexcept(::remote_call::toDynamic(dv, std::forward<TargetType>(val)))
     ) -> decltype(::remote_call::toDynamic(dv, std::forward<TargetType>(val))) {
         return ::remote_call::toDynamic(dv, std::forward<TargetType>(val));

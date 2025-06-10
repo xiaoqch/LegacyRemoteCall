@@ -40,7 +40,7 @@ struct MayUniquePtr {
         own = false;
         ptr = nullptr;
     }
-    inline std::unique_ptr<T> tryGetUniquePtr() {
+    [[nodiscard]] inline std::unique_ptr<T> tryGetUniquePtr() {
         if (!own) {
             if (!ptr) return {};
             return std::make_unique<T>(*ptr); // clone
@@ -49,17 +49,17 @@ struct MayUniquePtr {
         return std::unique_ptr<T>(const_cast<T*>(ptr));
     }
     template <typename RTN = T const*>
-    inline RTN get() = delete;
+    [[nodiscard]] inline RTN get() = delete;
     template <>
-    inline T const* get() {
+    [[nodiscard]] inline T const* get() {
         return ptr;
     };
     template <>
-    inline T* get() {
+    [[nodiscard]] inline T* get() {
         return const_cast<T*>(ptr);
     };
     template <>
-    inline std::unique_ptr<T> get() {
+    [[nodiscard]] inline std::unique_ptr<T> get() {
         return tryGetUniquePtr();
     };
 };
@@ -77,9 +77,9 @@ struct BlockType {
         dimension = 0;
     };
     template <typename RTN>
-    inline RTN get() = delete;
+    [[nodiscard]] inline RTN get() = delete;
     template <>
-    inline Block const* get() {
+    [[nodiscard]] inline Block const* get() {
         return block;
     };
 };
@@ -107,12 +107,12 @@ struct NumberType {
     NumberType(unsigned char v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
     template <typename RTN>
         requires(std::is_integral_v<RTN> && !ll::traits::is_char_v<RTN>)
-    inline RTN get() const {
+    [[nodiscard]] inline RTN get() const {
         return static_cast<RTN>(i);
     };
     template <typename RTN>
         requires(std::is_floating_point_v<RTN>)
-    inline RTN get() const {
+    [[nodiscard]] inline RTN get() const {
         return static_cast<RTN>(f);
     };
 };
@@ -124,21 +124,21 @@ struct WorldPosType {
     WorldPosType(Vec3 const& pos, int dimId = 3) : pos(pos), dimId(dimId) {};
     WorldPosType(std::pair<Vec3, int> const& pos) : pos(pos.first), dimId(pos.second) {};
     template <typename RTN>
-    inline RTN get() = delete;
+    [[nodiscard]] inline RTN get() = delete;
     template <>
-    inline Vec3 get() {
+    [[nodiscard]] inline Vec3 get() {
         return pos;
     };
     template <>
-    inline BlockPos get() {
+    [[nodiscard]] inline BlockPos get() {
         return BlockPos(pos);
     };
     template <>
-    inline std::pair<Vec3, int> get() {
+    [[nodiscard]] inline std::pair<Vec3, int> get() {
         return std::make_pair(pos, dimId);
     };
     template <>
-    inline std::pair<BlockPos, int> get() {
+    [[nodiscard]] inline std::pair<BlockPos, int> get() {
         return std::make_pair(BlockPos(pos), dimId);
     };
 };
@@ -150,21 +150,21 @@ struct BlockPosType {
     BlockPosType(BlockPos const& pos, int dimId = 0) : pos(pos), dimId(dimId) {};
     BlockPosType(std::pair<BlockPos, int> const& pos) : pos(pos.first), dimId(pos.second) {};
     template <typename RTN>
-    inline RTN get() = delete;
+    [[nodiscard]] inline RTN get() = delete;
     template <>
-    inline BlockPos get() {
+    [[nodiscard]] inline BlockPos get() {
         return pos;
     };
     template <>
-    inline std::pair<BlockPos, int> get() {
+    [[nodiscard]] inline std::pair<BlockPos, int> get() {
         return std::make_pair(pos, dimId);
     };
     template <>
-    inline Vec3 get() {
+    [[nodiscard]] inline Vec3 get() {
         return pos;
     };
     template <>
-    inline std::pair<Vec3, int> get() {
+    [[nodiscard]] inline std::pair<Vec3, int> get() {
         return std::make_pair(pos, dimId);
     };
 };

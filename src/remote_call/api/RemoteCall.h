@@ -12,8 +12,9 @@
 #include "remote_call/api/value/Base.h"
 #include "remote_call/api/value/DynamicValue.h"
 
-#include <remote_call/api/conversions/DefaultContainerConversion.h>
-#include <remote_call/api/conversions/DefaultConversion.h>
+// enable default conversions
+#include "remote_call/api/conversions/DefaultContainerConversions.h" // IWYU pragma: keep
+#include "remote_call/api/conversions/DefaultConversions.h"          // IWYU pragma: keep
 
 
 namespace remote_call {
@@ -68,6 +69,7 @@ consteval void checkUptrType() {
     if constexpr (concepts::IsUniquePtr<DecayedArg>)
         static_assert(!std::is_lvalue_reference_v<Arg>, "Reference to unique_ptr is not allowed");
 }
+
 template <typename... Args>
 consteval size_t getRequiredArgsCount() {
     size_t required = 0;
@@ -86,7 +88,7 @@ consteval size_t getRequiredArgsCount() {
 
 template <typename Fn, typename Ret, typename... Args>
     requires(std::invocable<Fn, Args...>)
-inline ll::Expected<> exportImpl(
+[[nodiscard]] inline ll::Expected<> exportImpl(
     std::in_place_type_t<Ret(Args...)>,
     std::string const& nameSpace,
     std::string const& funcName,
@@ -164,14 +166,15 @@ struct corrected_return<ll::Expected<Ret>> : corrected_return<Ret> {};
 
 
 template <typename Ret, typename... Args>
-inline auto importImpl(std::in_place_type_t<Ret(Args...)>, std::string const& nameSpace, std::string const& funcName) {
+[[nodiscard]] inline auto
+importImpl(std::in_place_type_t<Ret(Args...)>, std::string const& nameSpace, std::string const& funcName) {
     checkUptrType<Ret>();
     using ExpectedRet = corrected_return<Ret>::Excepted;
     using RealRet     = corrected_return<Ret>::Real;
     return [nameSpace, funcName](Args... args) -> ExpectedRet {
         auto res = importFunc(nameSpace, funcName);
         if (!res) {
-            return error_utils::makeNotFoundError(nameSpace, funcName);
+            return ll::forwardError(res.error());
         }
         auto&        rawFunc = res->get();
         DynamicValue params  = DynamicValue::array();
@@ -195,7 +198,7 @@ inline auto importImpl(std::in_place_type_t<Ret(Args...)>, std::string const& na
 
 template <typename Fn>
     requires(requires(Fn&& fn) { std::function(std::forward<Fn>(fn)); })
-inline auto importAs(std::string const& nameSpace, std::string const& funcName) {
+[[nodiscard]] inline auto importAs(std::string const& nameSpace, std::string const& funcName) {
     using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
     return impl::importImpl(std::in_place_type<DecayedFn>, nameSpace, funcName);
 }
