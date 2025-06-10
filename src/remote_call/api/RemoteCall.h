@@ -21,6 +21,12 @@ namespace remote_call {
 
 namespace impl {
 
+#ifdef REMOTE_CALL_ALWAYS_RETURN_EXPECTED
+constexpr bool ALWAYS_RETURN_EXPECTED = true;
+#else
+constexpr bool ALWAYS_RETURN_EXPECTED = false;
+#endif
+
 using traits::function_traits;
 
 // remove const, volatile, reference, and add pointer if necessary
@@ -182,6 +188,7 @@ template <typename Fn, typename Ret, typename... Args, typename... DefaultArgs>
             });
     }
 }
+
 template <size_t ArgsCount, size_t RequiredCount, typename Fn, typename Ret, typename... Args>
 [[nodiscard]] inline ll::Expected<DynamicValue> exportExCallImpl(
     std::in_place_type_t<Ret(Args...)>,
@@ -255,7 +262,7 @@ template <size_t ArgsCount, size_t RequiredCount, size_t NonOptionalArgsCount>
 
 template <typename Fn, typename Ret, typename... Args>
     requires(std::invocable<Fn, Args...>)
-[[nodiscard]] inline ll::Expected<> exportExImpl(
+[[nodiscard]] inline ll::Expected<FunctionRef> exportExImpl(
     std::in_place_type_t<Ret(Args...)>,
     std::string const& nameSpace,
     std::string const& funcName,
@@ -284,12 +291,13 @@ template <typename Fn, typename Ret, typename... Args>
             args
         );
     };
-    return exportFunc(nameSpace, funcName, std::move(rawFunc), ll::mod::NativeMod::current());
+    constexpr auto returnExpected = ALWAYS_RETURN_EXPECTED || ll::concepts::IsLeviExpected<Ret>;
+    return exportFunc(nameSpace, funcName, std::move(rawFunc), returnExpected, ll::mod::NativeMod::current());
 }
 
 template <typename Fn, typename Ret, typename... Args, typename... DefaultArgs>
     requires(std::invocable<Fn, Args...>)
-[[nodiscard]] inline ll::Expected<> exportImpl(
+[[nodiscard]] inline ll::Expected<FunctionRef> exportImpl(
     std::in_place_type_t<Ret(Args...)>,
     std::string const& nameSpace,
     std::string const& funcName,
@@ -312,7 +320,8 @@ template <typename Fn, typename Ret, typename... Args, typename... DefaultArgs>
         }
         return exportCallImpl(std::in_place_type<Ret(Args...)>, nameSpace, funcName, callback, args, defaultArgsTuple);
     };
-    return exportFunc(nameSpace, funcName, std::move(rawFunc), ll::mod::NativeMod::current());
+    constexpr auto returnExpected = ALWAYS_RETURN_EXPECTED || ll::concepts::IsLeviExpected<Ret>;
+    return exportFunc(nameSpace, funcName, std::move(rawFunc), returnExpected, ll::mod::NativeMod::current());
 }
 
 
@@ -346,7 +355,7 @@ importImpl(std::in_place_type_t<Ret(Args...)>, std::string const& nameSpace, std
         if (!res) {
             return ll::forwardError(res.error());
         }
-        auto&        rawFunc = res->get();
+        auto const&  rawFunc = *res;
         DynamicValue params  = DynamicValue::array();
         params.get<ArrayType>().reserve(sizeof...(Args));
         auto paramTuple = std::forward_as_tuple(std::forward<Args>(args)...);
@@ -379,18 +388,20 @@ inline ll::Expected<>
 exportAs(std::string const& nameSpace, std::string const& funcName, Fn&& callback, DefaultArgs&&... defaultArgs) {
     using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
     return impl::exportImpl(
-        std::in_place_type<DecayedFn>,
-        nameSpace,
-        funcName,
-        std::forward<Fn>(callback),
-        std::forward<DefaultArgs>(defaultArgs)...
-    );
+               std::in_place_type<DecayedFn>,
+               nameSpace,
+               funcName,
+               std::forward<Fn>(callback),
+               std::forward<DefaultArgs>(defaultArgs)...
+    )
+        .transform([](auto&&) {});
 }
 
 template <typename Fn, typename FuncWrapper>
 inline ll::Expected<> exportEx(std::string const& nameSpace, std::string const& funcName, FuncWrapper&& callback) {
     using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
-    return impl::exportExImpl(std::in_place_type<DecayedFn>, nameSpace, funcName, std::forward<FuncWrapper>(callback));
+    return impl::exportExImpl(std::in_place_type<DecayedFn>, nameSpace, funcName, std::forward<FuncWrapper>(callback))
+        .transform([](auto&&) {});
 }
 
 #define REMOTE_CALL_EXPORT_EX(nameSpace, funcName, fn)                                                                 \

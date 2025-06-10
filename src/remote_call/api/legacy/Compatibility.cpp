@@ -3,7 +3,8 @@
 #include "ll/api/Expected.h"
 #include "ll/api/io/Logger.h"
 #include "ll/api/mod/NativeMod.h"
-#include "remote_call/api/RemoteCall.h"
+#include "remote_call/api/ABI.h"
+#include "remote_call/api/utils/IdentifierMap.h"
 #include "remote_call/api/value/DynamicValue.h"
 #include "remote_call/core/LegacyRemoteCall.h"
 
@@ -15,14 +16,15 @@ CallbackFn const EMPTY_FUNC{};
 inline ll::io::Logger& getLogger() { return remote_call::LegacyRemoteCall::getInstance().getSelf().getLogger(); }
 
 bool exportFunc(std::string const& nameSpace, std::string const& funcName, CallbackFn&& callback, void* handle) {
-    auto           mod    = ll::mod::NativeMod::getByHandle(handle);
-    ll::Expected<> result = remote_call::exportFunc(
+    auto                                   mod    = ll::mod::NativeMod::getByHandle(handle);
+    ll::Expected<remote_call::FunctionRef> result = remote_call::exportFunc(
         nameSpace,
         funcName,
-        [callback =
-             std::move(callback)](std::vector<remote_call::DynamicValue>& args) -> ll::Expected<remote_call::DynamicValue> {
+        [callback = std::move(callback)](std::vector<remote_call::DynamicValue>& args
+        ) -> ll::Expected<remote_call::DynamicValue> {
             return callback(std::move(reinterpret_cast<std::vector<ValueType>&>(args)));
         },
+        false,
         mod
     );
     if (!result) {
@@ -30,12 +32,16 @@ bool exportFunc(std::string const& nameSpace, std::string const& funcName, Callb
     }
     return result.has_value();
 }
-std::unordered_map<std::string, CallbackFn> cached;
-CallbackFn const&                           importFunc(std::string const& nameSpace, std::string const& funcName) {
+
+remote_call::IdentifierMap<CallbackFn> cached;
+
+CallbackFn const& importFunc(std::string const& nameSpace, std::string const& funcName) {
     if (!remote_call::hasFunc(nameSpace, funcName)) return EMPTY_FUNC;
+    auto it = cached.find(std::pair<std::string_view, std::string_view>{nameSpace, funcName});
+    if (it != cached.end()) return it->second;
     return cached
         .emplace(
-            nameSpace + "::" + funcName,
+            std::make_pair(nameSpace, funcName),
             [nameSpace, funcName](std::vector<ValueType> args) -> ValueType {
                 auto func = remote_call::importFunc(nameSpace, funcName);
                 if (!func) {
@@ -44,7 +50,7 @@ CallbackFn const&                           importFunc(std::string const& nameSp
                     );
                     return {nullptr};
                 }
-                auto res = func->get()(reinterpret_cast<std::vector<remote_call::DynamicValue>&>(args));
+                auto res = func->callable(reinterpret_cast<std::vector<remote_call::DynamicValue>&>(args));
                 if (res) return std::move(reinterpret_cast<ValueType&>(*res));
                 _onCallError(fmt::format(
                     "Fail to invoke Function [{}::{}], reason: {}",

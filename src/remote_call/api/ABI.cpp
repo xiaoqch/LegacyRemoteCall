@@ -5,6 +5,8 @@
 #include "ll/api/mod/Mod.h"
 #include "ll/api/mod/ModManagerRegistry.h"
 #include "remote_call/api/utils/ErrorUtils.h"
+#include "remote_call/api/utils/IdentifierMap.h"
+
 
 namespace remote_call {
 
@@ -13,11 +15,14 @@ using CallableType = CallbackFn;
 struct ExportedFuncData {
     CallableType                callable;
     std::weak_ptr<ll::mod::Mod> provider;
+    bool                        returnExpected;
     bool                        disabled = false;
+    // NOLINTNEXTLINE: google-explicit-constructor
+    inline operator FunctionRef() { return {callable, returnExpected, disabled, provider}; }
 };
 
-CallbackFn const                                               EMPTY_FUNC{};
-std::unordered_map<std::string, remote_call::ExportedFuncData> exportedFuncs;
+
+IdentifierMap<ExportedFuncData> exportedFuncs;
 
 void clearMod(std::string_view name) {
     for (auto iter = exportedFuncs.begin(); iter != exportedFuncs.end();) {
@@ -50,62 +55,72 @@ bool registerOnModUnload() {
     return true;
 }
 
-ll::Expected<> exportFunc(
+ll::Expected<FunctionRef> exportFunc(
     std::string_view            nameSpace,
     std::string_view            funcName,
     CallbackFn&&                callback,
+    bool                        returnExpected,
     std::weak_ptr<ll::mod::Mod> mod // NOLINT: performance-unnecessary-value-param
 ) {
     [[maybe_unused]] static bool registered = registerOnModUnload();
     if (nameSpace.find("::") != std::string::npos) {
         return error_utils::makeError(error_utils::ErrorReason::InvalidName, "Namespace can't includes \"::\"");
     }
-    if (exportedFuncs.contains(fmt::format("{}::{}", nameSpace, funcName))) {
+    if (exportedFuncs.contains(std::pair{nameSpace, funcName})) {
         return error_utils::makeError(
             error_utils::ErrorReason::AlreadyExists,
             fmt::format("Fail to export! Function [{}::{}] already exists", nameSpace, funcName)
         );
     }
-    exportedFuncs.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(fmt::format("{}::{}", nameSpace, funcName)),
-        std::forward_as_tuple(std::move(callback), std::move(mod))
-    );
-    return {};
+    if constexpr (IdentifierMapIsParallelMap)
+        return exportedFuncs
+            .emplace(
+                std::make_pair(std::string(nameSpace), std::string(funcName)),
+                ExportedFuncData(std::move(callback), std::move(mod), returnExpected)
+            )
+            .first->second;
+    else
+        return exportedFuncs
+            .emplace(
+                std::piecewise_construct,
+                std::forward_as_tuple(nameSpace, funcName),
+                std::forward_as_tuple(std::move(callback), std::move(mod), returnExpected)
+            )
+            .first->second;
 }
 
-ll::Expected<std::reference_wrapper<CallbackFn>>
-importFunc(std::string_view nameSpace, std::string_view funcName, bool includeDisabled) {
-    auto iter = exportedFuncs.find(fmt::format("{}::{}", nameSpace, funcName));
+ll::Expected<FunctionRef> importFunc(std::string_view nameSpace, std::string_view funcName, bool includeDisabled) {
+    auto iter = exportedFuncs.find(std::pair{nameSpace, funcName});
     if (iter == exportedFuncs.end()) return error_utils::makeNotFoundError(nameSpace, funcName);
     if (!includeDisabled && iter->second.disabled) return error_utils::makeDisabledError(nameSpace, funcName);
-    return iter->second.callable;
+    return iter->second;
 }
 
 
 bool hasFunc(std::string_view nameSpace, std::string_view funcName, bool includeDisabled) {
-    auto iter = exportedFuncs.find(fmt::format("{}::{}", nameSpace, funcName));
+    auto iter = exportedFuncs.find(std::pair{nameSpace, funcName});
     if (iter == exportedFuncs.end()) return false;
     return includeDisabled || !iter->second.disabled;
 }
 
 std::weak_ptr<ll::mod::Mod> getProvider(std::string_view nameSpace, std::string_view funcName) {
-    auto iter = exportedFuncs.find(fmt::format("{}::{}", nameSpace, funcName));
+    auto iter = exportedFuncs.find(std::pair{nameSpace, funcName});
     if (iter == exportedFuncs.end()) return {};
     return iter->second.provider;
 }
 
-bool removeFunc(std::string&& key) { return exportedFuncs.erase(key); }
 
 bool removeFunc(std::string_view nameSpace, std::string_view funcName) {
-    return removeFunc(fmt::format("{}::{}", nameSpace, funcName));
+    auto it = exportedFuncs.find(std::pair{nameSpace, funcName});
+    if (it == exportedFuncs.end()) return false;
+    exportedFuncs.erase(it);
+    return true;
 }
 
 int removeNameSpace(std::string_view nameSpace) {
-    int         count  = 0;
-    std::string prefix = std::string(nameSpace).append("::");
+    int count = 0;
     for (auto iter = exportedFuncs.begin(); iter != exportedFuncs.end();) {
-        if (nameSpace.starts_with(prefix)) {
+        if (iter->first.first == nameSpace) {
             iter = exportedFuncs.erase(iter);
             ++count;
         } else ++iter;
@@ -116,7 +131,7 @@ int removeNameSpace(std::string_view nameSpace) {
 int removeFuncs(std::vector<std::pair<std::string, std::string>> const& funcs) {
     int count = 0;
     for (auto& [ns, name] : funcs) {
-        if (removeFunc(ns + "::" + name)) count++; // NOLINT: performance-inefficient-string-concatenation
+        if (removeFunc(ns, name)) count++;
     }
     return count;
 }
