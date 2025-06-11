@@ -133,8 +133,10 @@ struct DynamicValue : public detail::DynamicBase<DynamicValue> {
     template <concepts::SupportFromDynamicC T>
         requires(!IsAnyDynamicElement<T>)
     [[nodiscard]] inline ll::Expected<> getTo(T& out) {
-        return AdlSerializer<T>::fromDynamic(*this).transform([&](auto&& val) {
+        using Type = std::decay_t<decltype(*AdlSerializer<T>::fromDynamic(*this))>;
+        return AdlSerializer<T>::fromDynamic(*this).and_then([&](Type&& val) -> ll::Expected<> {
             out = std::forward<decltype(val)>(val);
+            return {};
         });
     }
     template <concepts::SupportFromDynamicR T>

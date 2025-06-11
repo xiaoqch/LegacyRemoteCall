@@ -22,27 +22,32 @@ template <typename T>
     requires(ll::concepts::IsOptional<std::remove_cvref_t<T>> && concepts::SupportToDynamic<typename std::remove_cvref_t<T>::value_type>)
 inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::HightTag) {
     if (t.has_value()) return ::remote_call::toDynamic(dv, *std::forward<T>(t));
-    else dv.emplace<NullType>(NULL_VALUE);
+    dv.emplace<NullType>(NULL_VALUE);
     return {};
 }
 template <ll::concepts::IsOptional T>
     requires(concepts::SupportFromDynamic<typename T::value_type> && std::is_default_constructible_v<typename T::value_type>)
 inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
+    using ValueType = T::value_type;
     if (dv.hold<NullType>()) {
-        t = {};
+        t.reset();
         return {};
     } else {
-        return dv.tryGet<typename T::value_type>().transform([&](auto&& val) { t = std::forward<decltype(val)>(val); });
+        return dv.tryGet<ValueType>().and_then([&](ValueType&& val) -> ll::Expected<> {
+            t.emplace(std::move(val));
+            return {};
+        });
     }
 }
 template <ll::concepts::IsOptional T>
     requires(concepts::SupportFromDynamic<typename std::remove_cvref_t<T>::value_type> && !std::is_default_constructible_v<typename std::remove_cvref_t<T>::value_type>)
 inline ll::Expected<T> fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, priority::HightTag) {
+    using ValueType = std::remove_cvref_t<T>::value_type;
     if (dv.hold<NullType>()) {
         return {};
     } else {
-        return dv.tryGet<typename std::remove_cvref_t<T>::value_type>().transform([&](auto&& val) {
-            return std::make_optional<std::remove_cvref_t<T>::value_type>(std::forward<decltype(val)>(val));
+        return dv.tryGet<ValueType>().transform([&](ValueType&& val) {
+            return std::make_optional<ValueType>(std::move(val));
         });
     }
 }

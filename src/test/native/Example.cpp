@@ -46,18 +46,16 @@ inline ll::Expected<> fromDynamic(remote_call::DynamicValue& dv, ItemInstance& i
 // getTo
 inline ll::Expected<> fromDynamic(remote_call::DynamicValue& dv, HashedString& hs, remote_call::priority::HightTag) {
     hs.clear();
-    return dv.getTo(hs.mStr).transform([&]() {
-        hs.mStrHash = HashedString::computeHash(hs.mStr);
-        return;
-    });
+    return dv.getTo(hs.mStr).transform([&]() { hs.mStrHash = HashedString::computeHash(hs.mStr); });
 }
 struct TempRecipesType {
-    std::string id;
-    std::string flag;
-    explicit    operator Recipes::Type() const {
-        auto  item       = ll::service::getLevel()->getItemRegistry().lookupByName("minecraft:stone");
-        auto& block      = BlockTypeRegistry::lookupByName("minecraft:stone")->mDefaultState;
-        auto  ingredient = RecipeIngredient("minecraft:stone", 1, 0);
+    HashedString id;
+    std::string  flag;
+
+    explicit operator Recipes::Type() && {
+        auto  item       = ll::service::getLevel()->getItemRegistry().lookupByName(id);
+        auto& block      = BlockTypeRegistry::lookupByName(id)->mDefaultState;
+        auto  ingredient = RecipeIngredient(id, 1, 0);
         return {item.get(), block, ingredient, flag.at(0)};
     }
 };
@@ -65,12 +63,9 @@ struct TempRecipesType {
 // Without default constructor
 inline ll::Expected<Recipes::Type>
 fromDynamic(remote_call::DynamicValue& dv, std::in_place_type_t<Recipes::Type>, remote_call::priority::HightTag) {
-    return dv.tryGet<TempRecipesType>().transform([](auto&& type) {
-        return static_cast<Recipes::Type>(std::forward<decltype(type)>(type));
+    return dv.tryGet<TempRecipesType>().transform([](TempRecipesType&& type) {
+        return static_cast<Recipes::Type>(std::move(type));
     });
-    // Or:
-    // TempRecipesType tmp{};
-    // return dv.getTo(tmp).transform([&]() { return static_cast<Recipes::Type>(tmp); });
 }
 
 // Function

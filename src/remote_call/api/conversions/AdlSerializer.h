@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ll/api/Expected.h"
 #include "ll/api/base/Concepts.h"
 #include "remote_call/api/conversions/detail/Detail.h"
 
