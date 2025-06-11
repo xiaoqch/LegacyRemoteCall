@@ -20,7 +20,7 @@ bool exportFunc(std::string const& nameSpace, std::string const& funcName, Callb
     ll::Expected<remote_call::FunctionRef> result = remote_call::exportFunc(
         nameSpace,
         funcName,
-        [callback = std::move(callback)](std::vector<remote_call::DynamicValue>& args
+        [callback = std::move(callback)](std::vector<remote_call::DynamicValue> args
         ) -> ll::Expected<remote_call::DynamicValue> {
             return callback(std::move(reinterpret_cast<std::vector<ValueType>&>(args)));
         },
@@ -50,7 +50,7 @@ CallbackFn const& importFunc(std::string const& nameSpace, std::string const& fu
                     );
                     return {nullptr};
                 }
-                auto res = func->callable(reinterpret_cast<std::vector<remote_call::DynamicValue>&>(args));
+                auto res = func->callable(std::move(reinterpret_cast<std::vector<remote_call::DynamicValue>&>(args)));
                 if (res) return std::move(reinterpret_cast<ValueType&>(*res));
                 _onCallError(fmt::format(
                     "Fail to invoke Function [{}::{}], reason: {}",

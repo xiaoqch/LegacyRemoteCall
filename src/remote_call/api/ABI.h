@@ -8,7 +8,7 @@
 
 namespace remote_call {
 
-using CallbackFn = std::function<ll::Expected<DynamicValue>(std::vector<DynamicValue>&)>;
+using CallbackFn = std::function<ll::Expected<DynamicValue>(std::vector<DynamicValue>)>;
 
 
 struct FunctionRef {
@@ -16,9 +16,11 @@ struct FunctionRef {
     bool const                        returnExpected;
     bool const                        disabled;
     std::weak_ptr<ll::mod::Mod> const provider;
+    // std::string_view                  nameSpace;
+    // std::string_view                  functionName;
 
-    [[nodiscard]] inline ll::Expected<DynamicValue> operator()(std::vector<DynamicValue>& args) const {
-        return callable(args);
+    [[nodiscard]] inline ll::Expected<DynamicValue> operator()(std::vector<DynamicValue>&& args) const {
+        return callable(std::move(args));
     }
 };
 
@@ -30,7 +32,7 @@ REMOTE_CALL_API ll::Expected<FunctionRef> exportFunc(
     std::weak_ptr<ll::mod::Mod> mod = ll::mod::NativeMod::current()
 );
 REMOTE_CALL_API      ll::Expected<FunctionRef>
-             importFunc(std::string_view nameSpace, std::string_view funcName, bool includeDisabled = false);
+                     importFunc(std::string_view nameSpace, std::string_view funcName, bool includeDisabled = false);
 REMOTE_CALL_API bool hasFunc(std::string_view nameSpace, std::string_view funcName, bool includeDisabled = false);
 REMOTE_CALL_API std::weak_ptr<ll::mod::Mod> getProvider(std::string_view nameSpace, std::string_view funcName);
 REMOTE_CALL_API bool                        removeFunc(std::string_view nameSpace, std::string_view funcName);

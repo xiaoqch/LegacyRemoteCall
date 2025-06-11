@@ -303,4 +303,17 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::PriorityTag<1
     return {};
 }
 
+// std::nullopt_t, std::monostate
+template <typename T>
+    requires(ll::concepts::IsOneOf<std::decay_t<T>, std::nullopt_t, std::monostate>)
+inline ll::Expected<> toDynamic(DynamicValue& dv, T&&, priority::DefaultTag) {
+    dv.emplace<NullType>(NULL_VALUE);
+    return {};
+}
+template <ll::concepts::IsOneOf<std::nullopt_t, std::monostate> T>
+inline ll::Expected<> fromDynamic(DynamicValue&, T& t, priority::DefaultTag) {
+    t = {};
+    return {};
+}
+
 } // namespace remote_call::detail

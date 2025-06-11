@@ -10,9 +10,9 @@ using HightTag    = PriorityTag<7>;
 using DefaultTag  = PriorityTag<5>;
 using LowTag      = PriorityTag<3>;
 
-template <size_t P>
+template <size_t P = 10>
 constexpr auto Priority = PriorityTag<P>{};
 
-constexpr auto Hightest = Priority<10>; // NOLINT: -Wunused-const-variable)
+[[maybe_unused]] constexpr auto Hightest = Priority<10>;
 
 } // namespace remote_call::priority

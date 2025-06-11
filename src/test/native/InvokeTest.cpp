@@ -233,7 +233,7 @@ bool                      testInvocation() {
         assert(res4 == BlockPos(11, 2, 13));
     }
     {
-        // ExportEx
+        // exportEx and importEx
         std::string    funcName = fmt::format("testFunc{}", ++index);
         constexpr auto testFunc = [](int x, std::optional<int> y, int z = 3) -> ll::Expected<BlockPos> {
             return BlockPos{x, y.value_or(2), z};
@@ -246,13 +246,15 @@ bool                      testInvocation() {
             { return testFunc(std::forward<decltype(args)>(args)...); };
             exportEx<decltype(testFunc)>(ns, funcName, testFuncWrapper).value();
         }
-        auto res1 = importAs<BlockPos(int, int)>(ns, funcName)(11, 12).value();
+        auto const func = importEx<BlockPos>(ns, funcName);
+
+        auto res1 = func(11, 12).value();
         assert(res1 == BlockPos(11, 12, 3));
-        auto res2 = importAs<BlockPos(int)>(ns, funcName)(11).value();
+        auto res2 = func(11).value();
         assert(res2 == BlockPos(11, 2, 3));
-        auto res3 = importAs<BlockPos(int, std::optional<int>, std::optional<int>)>(ns, funcName)(11, {}, {}).value();
+        auto res3 = func(11, std::monostate(), std::nullopt).value();
         assert(res3 == BlockPos(11, 2, 3));
-        auto res4 = importAs<BlockPos(int, std::optional<int>, std::optional<int>)>(ns, funcName)(11, {}, 13).value();
+        auto res4 = func(11, std::nullopt, 13).value();
         assert(res4 == BlockPos(11, 2, 13));
     }
     {

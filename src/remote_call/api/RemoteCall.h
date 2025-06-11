@@ -51,7 +51,7 @@ struct corrected_arg<T> {
 
 template <typename T, size_t I = 0>
     requires(corrected_arg<T>::add_pointer)
-typename corrected_arg<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& success) {
+[[nodiscard]] inline corrected_arg<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& success) {
     typename corrected_arg<T>::real p{}; // Player*
     if (success) {
         success = dv.getTo(p);
@@ -61,7 +61,7 @@ typename corrected_arg<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& su
 }
 template <typename T, size_t I = 0>
     requires(!corrected_arg<T>::add_pointer)
-corrected_arg<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& success) {
+[[nodiscard]] inline corrected_arg<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& success) {
     typename corrected_arg<T>::real p{};
     if (success) {
         success = dv.getTo(p);
@@ -72,7 +72,7 @@ corrected_arg<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& success) {
 
 template <typename T, size_t I = 0, size_t Req = 0, typename Def = std::tuple<>>
     requires(corrected_arg<T>::add_pointer)
-typename corrected_arg<T>::hold_type
+[[nodiscard]] inline corrected_arg<T>::hold_type
 unpackWithDefault(std::vector<DynamicValue>& dv, ll::Expected<>& success, Def const& defaultArgs) {
     if constexpr (I >= Req) {
         if (success && (I >= dv.size() || dv[I].is_null())) {
@@ -83,7 +83,7 @@ unpackWithDefault(std::vector<DynamicValue>& dv, ll::Expected<>& success, Def co
 }
 template <typename T, size_t I = 0, size_t Req = I, typename Def = std::tuple<>>
     requires(!corrected_arg<T>::add_pointer)
-corrected_arg<T>::hold_type
+[[nodiscard]] inline corrected_arg<T>::hold_type
 unpackWithDefault(std::vector<DynamicValue>& dv, ll::Expected<>& success, Def const& defaultArgs) {
     if constexpr (I >= Req) {
         if (success && (I >= dv.size() || dv[I].is_null())) {
@@ -196,40 +196,26 @@ template <size_t ArgsCount, size_t RequiredCount, typename Fn, typename Ret, typ
     std::string const&         nameSpace,
     std::string const&         funcName,
     Fn&&                       callback,
-    std::vector<DynamicValue>& args
+    std::vector<DynamicValue>& args,
+    size_t                     argsCount
 ) {
-    using RawTuple = std::tuple<Args...>;
-    if constexpr (ArgsCount == RequiredCount) {
-        return [&]<size_t... I>(std::index_sequence<I...>) -> auto {
-            return exportCallImpl(
-                std::in_place_type<Ret(std::tuple_element_t<I, RawTuple>...)>,
-                nameSpace,
-                funcName,
-                std::forward<Fn>(callback),
-                args
-            );
-        }(std::make_index_sequence<ArgsCount>());
-    } else {
-        if (args.size() < ArgsCount) {
+    if constexpr (ArgsCount > RequiredCount) {
+        if (argsCount < ArgsCount) {
             return exportExCallImpl<ArgsCount - 1, RequiredCount>(
                 std::in_place_type<Ret(Args...)>,
                 nameSpace,
                 funcName,
                 std::forward<Fn>(callback),
-                args
+                args,
+                argsCount
             );
-        } else {
-            return [&]<size_t... I>(std::index_sequence<I...>) -> auto {
-                return exportCallImpl(
-                    std::in_place_type<Ret(std::tuple_element_t<I, RawTuple>...)>,
-                    nameSpace,
-                    funcName,
-                    std::forward<Fn>(callback),
-                    args
-                );
-            }(std::make_index_sequence<ArgsCount>());
         }
     }
+    constexpr auto FunctionTag = [&]<size_t... I>(std::index_sequence<I...>) -> auto {
+        using RawTuple = std::tuple<Args...>;
+        return std::in_place_type<Ret(std::tuple_element_t<I, RawTuple>...)>;
+    }(std::make_index_sequence<ArgsCount>());
+    return exportCallImpl(FunctionTag, nameSpace, funcName, std::forward<Fn>(callback), args);
 }
 
 template <size_t ArgsCount, size_t RequiredCount, size_t NonOptionalArgsCount>
@@ -270,10 +256,9 @@ template <typename Fn, typename Ret, typename... Args>
     Fn&&               callback
 ) {
     void((checkUptrType<Args>(), ...));
-    /// TODO:
     CallbackFn rawFunc = [callback = std::forward<decltype(callback)>(callback),
                           nameSpace,
-                          funcName](std::vector<DynamicValue>& args) mutable -> ll::Expected<DynamicValue> {
+                          funcName](std::vector<DynamicValue> args) mutable -> ll::Expected<DynamicValue> {
         // args: int, optional<int>, int = 2
         // RequiredArgsCount = 2, NonOptionalArgsCount = 1
         constexpr size_t                  ArgsCount            = sizeof...(Args);
@@ -289,7 +274,8 @@ template <typename Fn, typename Ret, typename... Args>
             nameSpace,
             funcName,
             callback,
-            args
+            args,
+            args.size()
         );
     };
     constexpr auto returnExpected = ALWAYS_RETURN_EXPECTED || ll::concepts::IsLeviExpected<Ret>;
@@ -306,11 +292,10 @@ template <typename Fn, typename Ret, typename... Args, typename... DefaultArgs>
     DefaultArgs&&... defaultArgs
 ) {
     void((checkUptrType<Args>(), ...));
-    /// TODO:
     CallbackFn rawFunc = [callback         = std::forward<decltype(callback)>(callback),
                           defaultArgsTuple = std::make_tuple(std::forward<DefaultArgs>(defaultArgs)...),
                           nameSpace,
-                          funcName](std::vector<DynamicValue>& args) mutable -> ll::Expected<DynamicValue> {
+                          funcName](std::vector<DynamicValue> args) mutable -> ll::Expected<DynamicValue> {
         constexpr size_t ArgsCount            = sizeof...(Args);
         constexpr size_t DefaultArgsCount     = sizeof...(DefaultArgs);
         constexpr size_t RequiredArgsCount    = ArgsCount - DefaultArgsCount;
@@ -344,33 +329,49 @@ struct corrected_return<Ret&> : corrected_return<Ret> {};
 template <typename Ret>
 struct corrected_return<ll::Expected<Ret>> : corrected_return<Ret> {};
 
+template <typename Ret, typename... Args>
+[[nodiscard]] inline corrected_return<Ret>::Excepted
+importCallImpl(std::string const& nameSpace, std::string const& funcName, Args&&... args) {
+    using ExpectedRet = corrected_return<Ret>::Excepted;
+    using RealRet     = corrected_return<Ret>::Real;
+
+    auto res = importFunc(nameSpace, funcName);
+    if (!res) {
+        return ll::forwardError(res.error());
+    }
+    auto const&  rawFunc = *res;
+    DynamicValue params  = DynamicValue::array();
+    params.get<ArrayType>().reserve(sizeof...(Args));
+    auto paramTuple = std::forward_as_tuple(std::forward<Args>(args)...);
+
+    ll::Expected<> success = toDynamic(params, std::forward<decltype(paramTuple)>(paramTuple));
+    if (!success) return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "args", success.error());
+
+    auto dynRet = rawFunc(std::move(params).get<ArrayType>());
+    if (!dynRet) return error_utils::makeCallError<Ret, Args...>(nameSpace, funcName, dynRet.error());
+
+    return dynRet->tryGet<RealRet>().or_else([&nameSpace, &funcName](auto&& err) -> ExpectedRet {
+        return error_utils::makeDeserializeError<Ret, Args...>(nameSpace, funcName, "ret", err);
+    });
+}
+
+
+template <typename Ret>
+[[nodiscard]] inline auto importExImpl(std::string const& nameSpace, std::string const& funcName) {
+    checkUptrType<Ret>();
+    using ExpectedRet = corrected_return<Ret>::Excepted;
+    return [nameSpace, funcName](auto&&... args) -> ExpectedRet {
+        return importCallImpl<Ret>(nameSpace, funcName, std::forward<decltype(args)>(args)...);
+    };
+}
 
 template <typename Ret, typename... Args>
 [[nodiscard]] inline auto
 importImpl(std::in_place_type_t<Ret(Args...)>, std::string const& nameSpace, std::string const& funcName) {
     checkUptrType<Ret>();
     using ExpectedRet = corrected_return<Ret>::Excepted;
-    using RealRet     = corrected_return<Ret>::Real;
     return [nameSpace, funcName](Args... args) -> ExpectedRet {
-        auto res = importFunc(nameSpace, funcName);
-        if (!res) {
-            return ll::forwardError(res.error());
-        }
-        auto const&  rawFunc = *res;
-        DynamicValue params  = DynamicValue::array();
-        params.get<ArrayType>().reserve(sizeof...(Args));
-        auto paramTuple = std::forward_as_tuple(std::forward<Args>(args)...);
-
-        ll::Expected<> success = toDynamic(params, std::forward<decltype(paramTuple)>(paramTuple));
-        if (!success)
-            return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "args", success.error());
-
-        auto dynRet = rawFunc(params.get<ArrayType>());
-        if (!dynRet) return error_utils::makeCallError<Ret, Args...>(nameSpace, funcName, dynRet.error());
-
-        return dynRet->tryGet<RealRet>().or_else([&nameSpace, &funcName](auto&& err) -> ExpectedRet {
-            return error_utils::makeDeserializeError<Ret, Args...>(nameSpace, funcName, "ret", err);
-        });
+        return importCallImpl<Ret>(nameSpace, funcName, std::forward<decltype(args)>(args)...);
     };
 }
 
@@ -382,9 +383,12 @@ template <typename Fn>
     using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
     return impl::importImpl(std::in_place_type<DecayedFn>, nameSpace, funcName);
 }
+template <typename Ret>
+[[nodiscard]] inline auto importEx(std::string const& nameSpace, std::string const& funcName) {
+    return impl::importExImpl<Ret>(nameSpace, funcName);
+}
 
 template <typename Fn, typename... DefaultArgs>
-    requires(requires(Fn&& fn) { std::function(std::forward<Fn>(fn)); })
 inline ll::Expected<>
 exportAs(std::string const& nameSpace, std::string const& funcName, Fn&& callback, DefaultArgs&&... defaultArgs) {
     using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
