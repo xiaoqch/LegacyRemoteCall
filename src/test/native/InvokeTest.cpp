@@ -258,6 +258,26 @@ bool                      testInvocation() {
         assert(res4 == BlockPos(11, 2, 13));
     }
     {
+        // consteval
+        constexpr ll::FixedString<ns.size()> fns{ns};
+        constexpr ll::FixedString            fixedName{"constevalTest"};
+        constexpr auto testFunc = [](int x, std::optional<int> y, int z = 3) -> ll::Expected<BlockPos> {
+            return BlockPos{x, y.value_or(2), z};
+        };
+        REMOTE_CALL_EXPORT_EX(ns, fixedName.str(), testFunc).value();
+        constexpr auto funcEx = importEx<BlockPos, fns, fixedName>();
+        constexpr auto funcAs = importAs<BlockPos(int), fns, "constevalTest">();
+
+        auto res1 = funcEx(11, 12).value();
+        assert(res1 == BlockPos(11, 12, 3));
+        auto res2 = funcAs(11).value();
+        assert(res2 == BlockPos(11, 2, 3));
+        auto res3 = funcEx(11, std::monostate(), std::nullopt).value();
+        assert(res3 == BlockPos(11, 2, 3));
+        auto res4 = funcEx(11, std::nullopt, 13).value();
+        assert(res4 == BlockPos(11, 2, 13));
+    }
+    {
         std::string funcName = fmt::format("testFunc{}", ++index);
         Str         s{"abcdefghijklmnopqrstuvwxy"};
         auto        testFunc = [s]() mutable -> Str { return Str{s.s + "z"}; };

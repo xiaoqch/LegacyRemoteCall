@@ -2,6 +2,7 @@
 
 #include "ll/api/Expected.h"
 #include "ll/api/base/Concepts.h"
+#include "ll/api/base/FixedString.h"
 #include "ll/api/mod/NativeMod.h"
 #include "mc/nbt/CompoundTag.h"
 #include "remote_call/api/ABI.h"
@@ -356,6 +357,25 @@ importCallImpl(std::string const& nameSpace, std::string const& funcName, Args&&
 }
 
 
+template <typename Ret, typename... Args>
+[[nodiscard]] inline auto
+importImpl(std::in_place_type_t<Ret(Args...)>, std::string const& nameSpace, std::string const& funcName) {
+    checkUptrType<Ret>();
+    using ExpectedRet = corrected_return<Ret>::Excepted;
+    return [nameSpace, funcName](Args... args) -> ExpectedRet {
+        return importCallImpl<Ret>(nameSpace, funcName, std::forward<decltype(args)>(args)...);
+    };
+}
+
+template <ll::FixedString nameSpace, ll::FixedString funcName, typename Ret, typename... Args>
+[[nodiscard]] consteval auto importImpl() {
+    checkUptrType<Ret>();
+    using ExpectedRet = corrected_return<Ret>::Excepted;
+    return [](Args... args) -> ExpectedRet {
+        return importCallImpl<Ret>(nameSpace.str(), funcName.str(), std::forward<decltype(args)>(args)...);
+    };
+}
+
 template <typename Ret>
 [[nodiscard]] inline auto importExImpl(std::string const& nameSpace, std::string const& funcName) {
     checkUptrType<Ret>();
@@ -365,13 +385,12 @@ template <typename Ret>
     };
 }
 
-template <typename Ret, typename... Args>
-[[nodiscard]] inline auto
-importImpl(std::in_place_type_t<Ret(Args...)>, std::string const& nameSpace, std::string const& funcName) {
+template <ll::FixedString nameSpace, ll::FixedString funcName, typename Ret>
+[[nodiscard]] consteval auto importExImpl() {
     checkUptrType<Ret>();
     using ExpectedRet = corrected_return<Ret>::Excepted;
-    return [nameSpace, funcName](Args... args) -> ExpectedRet {
-        return importCallImpl<Ret>(nameSpace, funcName, std::forward<decltype(args)>(args)...);
+    return [](auto&&... args) -> ExpectedRet {
+        return importCallImpl<Ret>(nameSpace.str(), funcName.str(), std::forward<decltype(args)>(args)...);
     };
 }
 
@@ -383,9 +402,24 @@ template <typename Fn>
     using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
     return impl::importImpl(std::in_place_type<DecayedFn>, nameSpace, funcName);
 }
+
+template <typename Fn, ll::FixedString nameSpace, ll::FixedString funcName>
+    requires(requires(Fn&& fn) { std::function(std::forward<Fn>(fn)); })
+[[nodiscard]] consteval auto importAs() {
+    using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
+    return []<typename Ret, typename... Args>(std::in_place_type_t<Ret(Args...)>) {
+        return impl::importImpl<nameSpace, funcName, Ret, Args...>();
+    }(std::in_place_type<DecayedFn>);
+}
+
 template <typename Ret>
 [[nodiscard]] inline auto importEx(std::string const& nameSpace, std::string const& funcName) {
     return impl::importExImpl<Ret>(nameSpace, funcName);
+}
+
+template <typename Ret, ll::FixedString nameSpace, ll::FixedString funcName>
+[[nodiscard]] consteval auto importEx() {
+    return impl::importExImpl<nameSpace, funcName, Ret>();
 }
 
 template <typename Fn, typename... DefaultArgs>
