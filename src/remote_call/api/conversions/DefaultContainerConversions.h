@@ -335,7 +335,7 @@ fromDynamicReflectableImpl(DynamicValue& dv, std::in_place_type_t<boost::pfr::de
         constexpr std::string sname = std::string{ll::reflection::member_name_array_v<Obj>[I]};
         if (dv.contains(sname)) {
             if constexpr (requires(DynamicValue& s, MemberType& o) { std::move(s).getTo(o); }) {
-                auto opt = dv["name"].template tryGet<MemberType>(res);
+                auto opt = dv[sname].template tryGet<MemberType>(res);
                 if (!res) res = error_utils::makeSerMemberError(sname, res.error());
                 return opt;
             } else {
