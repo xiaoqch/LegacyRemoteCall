@@ -147,7 +147,7 @@ ll::coro::CoroTask<bool> testJsonType() {
 }
 
 
-auto simpleTestStarted =
+[[maybe_unused]] static auto test =
     (testJsonType().launch(
          ll::thread::ServerThreadExecutor::getDefault(),
          [](ll::Expected<bool>&& result) {

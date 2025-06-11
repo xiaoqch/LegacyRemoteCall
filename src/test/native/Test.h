@@ -22,4 +22,6 @@ inline void success(std::string_view msg) {
     getLogger().info(ll::string_utils::replaceMcToAnsiCode(fmt::format("{}{}", ColorFormat::GREEN, msg)));
 }
 
+inline void error(std::string_view msg) { getLogger().error(msg); }
+
 } // namespace remote_call::test

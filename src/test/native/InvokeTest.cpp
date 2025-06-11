@@ -3,6 +3,7 @@
 #include "ll/api/chrono/GameChrono.h"
 #include "ll/api/reflection/Reflection.h"
 #include "ll/api/thread/ServerThreadExecutor.h"
+#include "ll/api/utils/ErrorUtils.h"
 #include "mc/nbt/CompoundTag.h"
 #include "mc/world/level/BlockPos.h"
 #include "remote_call/api/RemoteCall.h"
@@ -182,7 +183,8 @@ bool                      testInvocation() {
         exportAs(ns, funcName, testFunc).value();
         auto tag       = std::make_unique<CompoundTag>();
         (*tag)["test"] = "value";
-        CompoundTag& res = importAs<CompoundTag&(std::unique_ptr<CompoundTag>&)>(ns, funcName)(tag).value();
+        [[maybe_unused]] CompoundTag& res =
+            importAs<CompoundTag&(std::unique_ptr<CompoundTag>&)>(ns, funcName)(tag).value();
         assert(res["test"] == "value");
     }
     {
@@ -270,12 +272,16 @@ bool                      testInvocation() {
 }
 // NOLINTEND
 
-auto const testResult = ll::thread::ServerThreadExecutor::getDefault().executeAfter(
+[[maybe_unused]] static auto test = ll::thread::ServerThreadExecutor::getDefault().executeAfter(
     [] {
-        if (testInvocation()) {
-            test::success("Invoke Test passed");
-        } else {
-            test::success("Invoke Test failed");
+        try {
+            if (testInvocation()) {
+                success("Invoke Test passed");
+            } else {
+                error("Invoke Test failed");
+            }
+        } catch (...) {
+            ll::error_utils::printCurrentException(getLogger());
         }
     },
     ll::chrono::ticks{1}

@@ -2,7 +2,7 @@
 
 #ifndef REMOTECALL_LEGACY_API
 
-#include <remote_call/api/RemoteCall.h>
+#include "remote_call/api/RemoteCall.h" // IWYU pragma: keep
 namespace RemoteCall = remote_call;
 
 #else

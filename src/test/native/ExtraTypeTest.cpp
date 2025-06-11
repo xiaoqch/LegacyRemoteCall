@@ -278,7 +278,7 @@ ll::coro::CoroTask<bool> testExtraType() {
     co_return true;
 };
 
-auto extraTestStarted =
+[[maybe_unused]] static auto test =
     (testExtraType().launch(
          ll::thread::ServerThreadExecutor::getDefault(),
          [](ll::Expected<bool>&& result) {
