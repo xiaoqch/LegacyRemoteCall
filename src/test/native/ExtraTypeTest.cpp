@@ -24,7 +24,7 @@
 #include "mc/world/level/Level.h"
 #include "mc/world/level/block/Block.h"
 #include "mc/world/level/block/actor/BlockActor.h"
-#include "remote_call/api/RemoteCall.h"
+#include "remote_call/api/API.h"
 
 namespace llRand = ll::random_utils;
 

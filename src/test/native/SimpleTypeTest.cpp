@@ -8,7 +8,7 @@
 #include "ll/api/thread/ServerThreadExecutor.h"
 #include "ll/api/utils/RandomUtils.h"
 #include "nlohmann/json.hpp" // IWYU pragma: keep
-#include "remote_call/api/RemoteCall.h"
+#include "remote_call/api/API.h"
 
 namespace llRand = ll::random_utils;
 namespace remote_call::test {

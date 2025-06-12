@@ -2,9 +2,7 @@
 #include "ll/api/Expected.h"
 #include "mc/world/item/ItemStack.h"
 #include "reflection/SerializationExt.h"
-#include "remote_call/api/RemoteCall.h"
-#include "remote_call/api/value/Base.h"
-#include "remote_call/api/value/DynamicValue.h"
+#include "remote_call/api/API.h"
 
 #include <any>
 

@@ -25,7 +25,7 @@
 #include "mc/world/level/block/Block.h"
 #include "mc/world/level/block/BlockLegacy.h"
 #include "mc/world/level/block/registry/BlockTypeRegistry.h"
-#include "remote_call/api/RemoteCall.h"
+#include "remote_call/api/API.h"
 
 // Custom conversions
 

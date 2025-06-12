@@ -4,7 +4,7 @@
 #include "ll/api/reflection/Reflection.h"
 #include "ll/api/thread/ServerThreadExecutor.h"
 #include "ll/api/utils/ErrorUtils.h"
-#include "remote_call/api/RemoteCall.h" // IWYU pragma: keep
+#include "remote_call/api/API.h" // IWYU pragma: keep
 
 // variant
 namespace remote_call::detail {

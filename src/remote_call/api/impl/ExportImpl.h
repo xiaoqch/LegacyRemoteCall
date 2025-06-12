@@ -1,35 +1,18 @@
 #pragma once
 
-#include "ll/api/Expected.h"
-#include "ll/api/base/Concepts.h"
-#include "ll/api/base/FixedString.h"
-#include "ll/api/mod/NativeMod.h"
-#include "mc/nbt/CompoundTag.h"
+#include "Common.h"
 #include "remote_call/api/ABI.h"
-#include "remote_call/api/base/Concepts.h"
-#include "remote_call/api/base/TypeTraits.h"
-#include "remote_call/api/conversions/AdlSerializer.h"
-#include "remote_call/api/conversions/detail/Detail.h"
 #include "remote_call/api/utils/ErrorUtils.h"
-#include "remote_call/api/value/Base.h"
 #include "remote_call/api/value/DynamicValue.h"
 
-// enable default conversions
-#include "remote_call/api/conversions/DefaultContainerConversions.h" // IWYU pragma: keep
-#include "remote_call/api/conversions/DefaultConversions.h"          // IWYU pragma: keep
 
-
-namespace remote_call {
-
-namespace impl {
+namespace remote_call::impl {
 
 #ifdef REMOTE_CALL_ALWAYS_RETURN_EXPECTED
 constexpr bool ALWAYS_RETURN_EXPECTED = true;
 #else
 constexpr bool ALWAYS_RETURN_EXPECTED = false;
 #endif
-
-using traits::function_traits;
 
 // remove const, volatile, reference, and add pointer if necessary
 // real for get by DynamicValue
@@ -71,19 +54,7 @@ template <typename T, size_t I = 0>
     return p;
 }
 
-template <typename T, size_t I = 0, size_t Req = 0, typename Def = std::tuple<>>
-    requires(corrected_arg<T>::add_pointer)
-[[nodiscard]] inline corrected_arg<T>::hold_type
-unpackWithDefault(std::vector<DynamicValue>& dv, ll::Expected<>& success, Def const& defaultArgs) {
-    if constexpr (I >= Req) {
-        if (success && (I >= dv.size() || dv[I].is_null())) {
-            return std::get<I - Req>(defaultArgs);
-        }
-    }
-    return unpack<T>(dv[I], success);
-}
 template <typename T, size_t I = 0, size_t Req = I, typename Def = std::tuple<>>
-    requires(!corrected_arg<T>::add_pointer)
 [[nodiscard]] inline corrected_arg<T>::hold_type
 unpackWithDefault(std::vector<DynamicValue>& dv, ll::Expected<>& success, Def const& defaultArgs) {
     if constexpr (I >= Req) {
@@ -92,13 +63,6 @@ unpackWithDefault(std::vector<DynamicValue>& dv, ll::Expected<>& success, Def co
         }
     }
     return unpack<T>(dv[I], success);
-}
-
-template <typename Arg>
-consteval void checkUptrType() {
-    using DecayedArg = std::decay_t<Arg>;
-    if constexpr (concepts::IsUniquePtr<DecayedArg>)
-        static_assert(!std::is_lvalue_reference_v<Arg>, "Reference to unique_ptr is not allowed");
 }
 
 template <size_t Max, typename... Args>
@@ -142,7 +106,6 @@ consteval size_t getRequiredArgsCount(std::in_place_type_t<Fn>)
     }(std::index_sequence_for<Args...>{});
     return required;
 }
-
 
 template <typename Fn, typename Ret, typename... Args, typename... DefaultArgs>
 [[nodiscard]] inline ll::Expected<DynamicValue> exportCallImpl(
@@ -311,145 +274,4 @@ template <typename Fn, typename Ret, typename... Args, typename... DefaultArgs>
     return exportFunc(nameSpace, funcName, std::move(rawFunc), returnExpected, ll::mod::NativeMod::current());
 }
 
-
-template <typename Ret>
-struct corrected_return {
-    using Real     = Ret;
-    using Excepted = decltype(std::declval<DynamicValue>().tryGet<Ret>());
-};
-template <typename Ret>
-struct corrected_return<Ret const> : corrected_return<Ret> {};
-
-template <typename Ret>
-struct corrected_return<Ret&&> : corrected_return<Ret> {};
-
-template <typename Ret>
-    requires(!concepts::SupportFromDynamic<Ret*>)
-struct corrected_return<Ret&> : corrected_return<Ret> {};
-
-template <typename Ret>
-struct corrected_return<ll::Expected<Ret>> : corrected_return<Ret> {};
-
-template <typename Ret, typename... Args>
-[[nodiscard]] inline corrected_return<Ret>::Excepted
-importCallImpl(std::string const& nameSpace, std::string const& funcName, Args&&... args) {
-    using ExpectedRet = corrected_return<Ret>::Excepted;
-    using RealRet     = corrected_return<Ret>::Real;
-
-    auto res = importFunc(nameSpace, funcName);
-    if (!res) {
-        return ll::forwardError(res.error());
-    }
-    auto const&  rawFunc = *res;
-    DynamicValue params  = DynamicValue::array();
-    params.get<ArrayType>().reserve(sizeof...(Args));
-    auto paramTuple = std::forward_as_tuple(std::forward<Args>(args)...);
-
-    ll::Expected<> success = toDynamic(params, std::forward<decltype(paramTuple)>(paramTuple));
-    if (!success) return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "args", success.error());
-
-    auto dynRet = rawFunc(std::move(params).get<ArrayType>());
-    if (!dynRet) return error_utils::makeCallError<Ret, Args...>(nameSpace, funcName, dynRet.error());
-
-    return dynRet->tryGet<RealRet>().or_else([&nameSpace, &funcName](auto&& err) -> ExpectedRet {
-        return error_utils::makeDeserializeError<Ret, Args...>(nameSpace, funcName, "ret", err);
-    });
-}
-
-
-template <typename Ret, typename... Args>
-[[nodiscard]] inline auto
-importImpl(std::in_place_type_t<Ret(Args...)>, std::string const& nameSpace, std::string const& funcName) {
-    checkUptrType<Ret>();
-    using ExpectedRet = corrected_return<Ret>::Excepted;
-    return [nameSpace, funcName](Args... args) -> ExpectedRet {
-        return importCallImpl<Ret>(nameSpace, funcName, std::forward<decltype(args)>(args)...);
-    };
-}
-
-template <ll::FixedString nameSpace, ll::FixedString funcName, typename Ret, typename... Args>
-[[nodiscard]] consteval auto importImpl() {
-    checkUptrType<Ret>();
-    using ExpectedRet = corrected_return<Ret>::Excepted;
-    return [](Args... args) -> ExpectedRet {
-        return importCallImpl<Ret>(nameSpace.str(), funcName.str(), std::forward<decltype(args)>(args)...);
-    };
-}
-
-template <typename Ret>
-[[nodiscard]] inline auto importExImpl(std::string const& nameSpace, std::string const& funcName) {
-    checkUptrType<Ret>();
-    using ExpectedRet = corrected_return<Ret>::Excepted;
-    return [nameSpace, funcName](auto&&... args) -> ExpectedRet {
-        return importCallImpl<Ret>(nameSpace, funcName, std::forward<decltype(args)>(args)...);
-    };
-}
-
-template <ll::FixedString nameSpace, ll::FixedString funcName, typename Ret>
-[[nodiscard]] consteval auto importExImpl() {
-    checkUptrType<Ret>();
-    using ExpectedRet = corrected_return<Ret>::Excepted;
-    return [](auto&&... args) -> ExpectedRet {
-        return importCallImpl<Ret>(nameSpace.str(), funcName.str(), std::forward<decltype(args)>(args)...);
-    };
-}
-
-} // namespace impl
-
-template <typename Fn>
-    requires(requires(Fn&& fn) { std::function(std::forward<Fn>(fn)); })
-[[nodiscard]] inline auto importAs(std::string const& nameSpace, std::string const& funcName) {
-    using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
-    return impl::importImpl(std::in_place_type<DecayedFn>, nameSpace, funcName);
-}
-
-template <typename Fn, ll::FixedString nameSpace, ll::FixedString funcName>
-    requires(requires(Fn&& fn) { std::function(std::forward<Fn>(fn)); })
-[[nodiscard]] consteval auto importAs() {
-    using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
-    return []<typename Ret, typename... Args>(std::in_place_type_t<Ret(Args...)>) {
-        return impl::importImpl<nameSpace, funcName, Ret, Args...>();
-    }(std::in_place_type<DecayedFn>);
-}
-
-template <typename Ret>
-[[nodiscard]] inline auto importEx(std::string const& nameSpace, std::string const& funcName) {
-    return impl::importExImpl<Ret>(nameSpace, funcName);
-}
-
-template <typename Ret, ll::FixedString nameSpace, ll::FixedString funcName>
-[[nodiscard]] consteval auto importEx() {
-    return impl::importExImpl<nameSpace, funcName, Ret>();
-}
-
-template <typename Fn, typename... DefaultArgs>
-inline ll::Expected<>
-exportAs(std::string const& nameSpace, std::string const& funcName, Fn&& callback, DefaultArgs&&... defaultArgs) {
-    using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
-    return impl::exportImpl(
-               std::in_place_type<DecayedFn>,
-               nameSpace,
-               funcName,
-               std::forward<Fn>(callback),
-               std::forward<DefaultArgs>(defaultArgs)...
-    )
-        .transform([](auto&&) {});
-}
-
-template <typename Fn, typename FuncWrapper>
-inline ll::Expected<> exportEx(std::string const& nameSpace, std::string const& funcName, FuncWrapper&& callback) {
-    using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
-    return impl::exportExImpl(std::in_place_type<DecayedFn>, nameSpace, funcName, std::forward<FuncWrapper>(callback))
-        .transform([](auto&&) {});
-}
-
-#define REMOTE_CALL_EXPORT_EX(nameSpace, funcName, fn)                                                                 \
-    ::remote_call::exportEx<decltype(fn)>(                                                                             \
-        nameSpace,                                                                                                     \
-        funcName,                                                                                                      \
-        [](auto&&... args) -> auto                                                                                     \
-            requires requires() { fn(std::forward<decltype(args)>(args)...); }                                         \
-        { return fn(std::forward<decltype(args)>(args)...); }                                                          \
-        )
-
-} // namespace remote_call
+} // namespace remote_call::impl

@@ -252,9 +252,7 @@ struct DynamicValue : public detail::DynamicBase<DynamicValue> {
     [[nodiscard]] inline DynamicValue& operator[](std::string_view index) { return (*this)[std::string{index}]; }
     template <size_t N>
     [[nodiscard]] inline DynamicValue& operator[](const char (&index)[N]) {
-        std::string_view sv{index, N};
-        if (sv.ends_with("\0")) sv.remove_suffix(1);
-        return (*this)[sv];
+        return (*this)[std::string_view{index, N - 1}];
     }
     [[nodiscard]] inline auto const& items() const {
         if (!hold<ObjectType>()) {

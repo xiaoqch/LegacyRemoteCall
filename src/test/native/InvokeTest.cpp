@@ -6,7 +6,7 @@
 #include "ll/api/utils/ErrorUtils.h"
 #include "mc/nbt/CompoundTag.h"
 #include "mc/world/level/BlockPos.h"
-#include "remote_call/api/RemoteCall.h"
+#include "remote_call/api/API.h"
 
 
 namespace remote_call::test {
