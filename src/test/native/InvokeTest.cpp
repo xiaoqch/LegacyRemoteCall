@@ -162,16 +162,20 @@ bool                      testInvocation() {
         // getLogger().debug(res.error().message());
     }
     {
-        // Failed to parse DynamicValue to class BlockPos. Expected alternative struct remote_call::BlockPosType,struct
-        // remote_call::WorldPosType. Holding alternative class std::basic_string<char,struct
-        // std::char_traits<char>,class std::allocator<char> >. Failed to deserialize value. Field:
-        // args[0].node.property.value.pos
+        // clang-format off
+        // Failed to parse DynamicValue to class BlockPos. Expected alternative BlockPosType|WorldPosType. Holding alternative std::string.
+        // Failed to deserialize value. Field: args[0].node.property.value.pos
+        // Function: [RemoteCallTest::testFunc10](signature class BlockPos(const struct remote_call::test::Root &)) provided by <LegacyRemoteCall>.
+        // Failed to call function!
+        // Function: [RemoteCallTest::testFunc10](signature class Player*(const struct remote_call::test::AnotherRoot &)) provided by <LegacyRemoteCall>.
+        // clang-format on
         std::string    funcName = fmt::format("testFunc{}", ++index);
         constexpr auto testFunc = [](Root const& a1) -> BlockPos { return a1.node.property.value.pos; };
         exportAs(ns, funcName, testFunc).value();
-        auto res = importAs<Player*(AnotherRoot const&)>(ns, funcName)({});
+        auto res = importEx<Player*>(ns, funcName)(AnotherRoot{});
         assert(!res);
         auto msg = res.error().message();
+        assert(msg.find(reflection::typeListName<BlockPosType, WorldPosType>()));
         assert(msg.find("args[0].node.property.value.pos") != std::string::npos);
         assert(res.error().isA<error_utils::RemoteCallError>());
         assert(res.error().as<error_utils::RemoteCallError>().reason() == error_utils::ErrorReason::UnexpectedType);

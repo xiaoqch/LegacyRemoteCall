@@ -4,17 +4,17 @@
 #include "ll/api/Expected.h"
 #include "ll/api/base/Concepts.h"
 #include "ll/api/mod/Mod.h"
-#include "ll/api/reflection/TypeName.h"
 #include "remote_call/api/ABI.h"
 #include "remote_call/api/base/Concepts.h"
+#include "remote_call/api/reflection/TypeName.h"
 #include "remote_call/api/value/DynamicValue.h"
 
 
 namespace remote_call::error_utils {
 
 using ll::reflection::type_raw_name_v;
-
-struct UnknownFn {};
+using reflection::typeListName;
+using reflection::typeName;
 
 enum class ErrorReason {
     Unknown = 0,
@@ -39,9 +39,7 @@ public:
     RemoteCallError(ErrorReason reason, std::string&& msg, std::optional<ll::Error> originError = {}) noexcept
     : mReason(reason),
       mMessage(std::move(msg)),
-      mOriginError(std::move(originError)) {
-        assert(!mOriginError || !mOriginError->isA<RemoteCallError>());
-    }
+      mOriginError(std::move(originError)) {}
     ~RemoteCallError() override = default;
     [[nodiscard]] inline std::string message() const noexcept override {
         if (!mOriginError) return mMessage;
@@ -52,7 +50,7 @@ public:
         mMessage.append(msg);
         return *this;
     }
-    template <typename Fn = UnknownFn>
+    template <typename Fn = void>
     RemoteCallError& append(std::string_view ns, std::string_view func) {
         if (!mMessage.ends_with("\n")) mMessage.append("\n");
         auto  provider     = getProvider(ns, func).lock();
@@ -80,6 +78,11 @@ public:
         return *this;
     }
     [[nodiscard]] inline ErrorReason reason() const noexcept { return mReason; }
+
+    [[nodiscard]] inline static bool isRemoteCallError(ll::Error& error) {
+        /// TODO:
+        return error.isA<RemoteCallError>();
+    }
 };
 
 
@@ -133,7 +136,7 @@ template <typename Ret, typename... Args>
 template <typename Ret, typename... Args>
 [[nodiscard]] inline ll::Unexpected
 makeSerializeError(std::string_view ns, std::string_view func, std::string_view valueName, ll::Error& error) {
-    if (error.isA<RemoteCallError>()) {
+    if (RemoteCallError::isRemoteCallError(error)) {
         auto& newError = error.as<RemoteCallError>();
         newError.flushFields("Failed to serialize value.", valueName);
         newError.append<Ret(Args...)>(ns, func);
@@ -145,7 +148,7 @@ makeSerializeError(std::string_view ns, std::string_view func, std::string_view 
 template <typename Ret, typename... Args>
 [[nodiscard]] inline ll::Unexpected
 makeDeserializeError(std::string_view ns, std::string_view func, std::string_view valueName, ll::Error& error) {
-    if (error.isA<RemoteCallError>()) {
+    if (RemoteCallError::isRemoteCallError(error)) {
         auto& newError = error.as<RemoteCallError>();
         newError.flushFields("Failed to deserialize value.", valueName);
         newError.append<Ret(Args...)>(ns, func);
@@ -156,49 +159,12 @@ makeDeserializeError(std::string_view ns, std::string_view func, std::string_vie
 
 template <typename Ret, typename... Args>
 [[nodiscard]] inline ll::Unexpected makeCallError(std::string_view ns, std::string_view func, ll::Error& error) {
-    if (error.isA<RemoteCallError>()) {
+    if (RemoteCallError::isRemoteCallError(error)) {
         auto& newError = error.as<RemoteCallError>();
         newError.append("Failed to call function!").append<Ret(Args...)>(ns, func);
         return ll::forwardError(error);
     }
     return makeUnknownError<Ret(Args...)>(ns, func, "Unknown Call Error: {}", std::move(error));
-}
-
-
-template <typename T>
-// requires(traits::is_variant_alternative_v<ElementType, std::decay_t<T>> ||
-// traits::is_variant_alternative_v<VariantType, std::decay_t<T>>)
-consteval std::string_view typeName() {
-    if constexpr (std::is_same_v<ObjectType, std::decay_t<T>>) {
-        return "class remote_call::ObjectType";
-    } else if constexpr (std::is_same_v<ArrayType, std::decay_t<T>>) {
-        return "class remote_call::ArrayType";
-    } else if constexpr (std::is_same_v<VariantType, std::decay_t<T>>) {
-        return "class remote_call::VariantType";
-    } else {
-        return type_raw_name_v<T>;
-        // static_assert(ll::traits::always_false<T>, "Unknown type");
-    }
-}
-
-[[nodiscard]] inline std::string_view typeName(DynamicValue const& dv) {
-    constexpr auto getRawName = [](auto&& v) { return typeName<std::decay_t<decltype(v)>>(); };
-    if (dv.hold<ElementType>()) {
-        return std::visit(getRawName, dv.get<ElementType>());
-    } else {
-        return std::visit(getRawName, dv);
-    }
-}
-
-
-template <typename... T>
-consteval auto typeListName() {
-    if constexpr (sizeof...(T) == 0) return std::string_view{"void"};
-    if constexpr (sizeof...(T) == 1) return typeName<T...>();
-    auto list = type_raw_name_v<void(T...)>;
-    list.remove_prefix(5);
-    list.remove_suffix(1);
-    return list;
 }
 
 template <typename Target, typename... Expected>
@@ -223,7 +189,7 @@ template <typename T, typename Target>
 }
 
 [[nodiscard]] inline ll::Unexpected makeSerMemberError(std::string_view name, ll::Error& error) noexcept {
-    if (error.isA<RemoteCallError>()) {
+    if (RemoteCallError::isRemoteCallError(error)) {
         error.as<RemoteCallError>().joinField(fmt::format(".{}", name));
         return ll::forwardError(error);
     }
@@ -232,7 +198,7 @@ template <typename T, typename Target>
     return ::nonstd::make_unexpected<ll::Error>(std::in_place, std::move(newError));
 }
 [[nodiscard]] inline ll::Unexpected makeSerIndexError(std::size_t idx, ll::Error& error) noexcept {
-    if (error.isA<RemoteCallError>()) {
+    if (RemoteCallError::isRemoteCallError(error)) {
         error.as<RemoteCallError>().joinField(fmt::format("[{}]", idx));
         return ll::forwardError(error);
     }
@@ -242,7 +208,7 @@ template <typename T, typename Target>
 }
 
 [[nodiscard]] inline ll::Unexpected makeSerKeyError(std::string_view key, ll::Error& error) noexcept {
-    if (error.isA<RemoteCallError>()) {
+    if (RemoteCallError::isRemoteCallError(error)) {
         error.as<RemoteCallError>().joinField(fmt::format("[\"{}\"]", key));
         return ll::forwardError(error);
     }

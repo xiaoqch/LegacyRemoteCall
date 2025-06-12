@@ -4,12 +4,12 @@
 #include "ll/api/Expected.h"
 #include "ll/api/base/Concepts.h"
 #include "ll/api/reflection/Reflection.h"
-#include "ll/api/reflection/TypeName.h"
 #include "magic_enum.hpp"
 #include "remote_call/api/base/Concepts.h"
 #include "remote_call/api/base/Meta.h"
 #include "remote_call/api/conversions/AdlSerializer.h"
 #include "remote_call/api/reflection/Reflection.h"
+#include "remote_call/api/reflection/TypeName.h"
 #include "remote_call/api/utils/ErrorUtils.h"
 #include "remote_call/api/value/Base.h"
 #include "remote_call/api/value/DynamicValue.h"
@@ -251,9 +251,8 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& map, ll::meta::PriorityTa
             auto key = magic_enum::enum_cast<typename T::key_type>(k);
             if (!key)
                 return error_utils::makeError(
-                    error_utils::ErrorReason::Unknown,
-                    fmt::
-                        format("enum key '{}' cannot parse as '{}'", k, ll::reflection::type_name_v<typename T::key_type>)
+                    error_utils::ErrorReason::UnsupportedValue,
+                    fmt::format("enum key '{}' cannot parse as '{}'", k, reflection::typeName<typename T::key_type>())
                 );
             auto res = v.tryGet<typename T::mapped_type>();
             if (!res) return error_utils::makeSerKeyError(k, res.error());

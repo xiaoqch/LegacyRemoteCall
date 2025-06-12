@@ -129,7 +129,11 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::DefaultTag) 
         }
         auto ptr = dv.get<Player*>();
         if constexpr (std::convertible_to<T, SimulatedPlayer const*>) {
-            if (ptr && !ptr->isSimulatedPlayer()) return ll::makeStringError("Player is not SimulatedPlayer");
+            if (ptr && !ptr->isSimulatedPlayer())
+                return error_utils::makeError(
+                    error_utils::ErrorReason::UnsupportedValue,
+                    "Player is not SimulatedPlayer"
+                );
         }
         t = reinterpret_cast<T>(ptr);
         return {};
