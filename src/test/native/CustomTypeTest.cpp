@@ -73,7 +73,7 @@ struct TempCustomType {
 template <typename T>
     requires(std::same_as<std::decay_t<T>, CustomType>)
 inline ll::Expected<> toDynamic(remote_call::DynamicValue& dv, T&& v, remote_call::priority::HightTag) {
-    auto& obj = dv.emplace<remote_call::ObjectType>();
+    auto& obj = dv.emplace<remote_call::DynamicObject>();
     obj["name"].emplace<std::string>(v.customName);
     return remote_call::DynamicValue::from(obj["identifier"], reinterpret_cast<std::variant<std::string, int>&>(v));
 }
@@ -81,7 +81,7 @@ inline ll::Expected<> toDynamic(remote_call::DynamicValue& dv, T&& v, remote_cal
 inline ll::Expected<CustomType>
 fromDynamic(remote_call::DynamicValue& dv, std::in_place_type_t<CustomType>, remote_call::priority::HightTag) {
     using Type = std::variant<std::string, int>;
-    if (dv.hold<remote_call::ArrayType>()) {
+    if (dv.hold<remote_call::DynamicArray>()) {
         using Pair = std::pair<Type, std::optional<std::string>>;
         return dv.tryGet<Pair>().transform([](Pair&& pair) {
             CustomType type{std::move(pair).first};
@@ -90,7 +90,7 @@ fromDynamic(remote_call::DynamicValue& dv, std::in_place_type_t<CustomType>, rem
             }
             return type;
         });
-    } else if (dv.hold<remote_call::ObjectType>()) {
+    } else if (dv.hold<remote_call::DynamicObject>()) {
         return dv.tryGet<TempCustomType>().transform([](TempCustomType&& type) {
             return static_cast<CustomType>(std::move(type));
         });

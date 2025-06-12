@@ -9,33 +9,33 @@
 namespace remote_call::impl {
 
 #ifdef REMOTE_CALL_ALWAYS_RETURN_EXPECTED
-constexpr bool ALWAYS_RETURN_EXPECTED = true;
+inline constexpr bool ALWAYS_RETURN_EXPECTED = true;
 #else
-constexpr bool ALWAYS_RETURN_EXPECTED = false;
+inline constexpr bool ALWAYS_RETURN_EXPECTED = false;
 #endif
 
 // remove const, volatile, reference, and add pointer if necessary
 // real for get by DynamicValue
 template <typename T>
 struct corrected_arg {
-    using hold_type                   = std::decay_t<T>;
-    using real                        = std::decay_t<T>;
-    static constexpr bool add_pointer = false;
+    using hold_type                          = std::decay_t<T>;
+    using real                               = std::decay_t<T>;
+    static inline constexpr bool add_pointer = false;
 };
 
 // Player& -> Player*, CompoundTag& -> CompoundTag*...
 template <typename T>
     requires(std::is_lvalue_reference_v<T> && concepts::SupportFromDynamic<std::add_pointer_t<std::remove_cvref_t<T>>>)
 struct corrected_arg<T> {
-    using hold_type                   = std::reference_wrapper<std::decay_t<T>>;
-    using real                        = std::add_pointer_t<std::decay_t<T>>;
-    static constexpr bool add_pointer = true;
+    using hold_type                          = std::reference_wrapper<std::decay_t<T>>;
+    using real                               = std::add_pointer_t<std::decay_t<T>>;
+    static inline constexpr bool add_pointer = true;
 };
 
 
 template <typename T, size_t I = 0>
     requires(corrected_arg<T>::add_pointer)
-[[nodiscard]] inline corrected_arg<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& success) {
+[[nodiscard]] constexpr corrected_arg<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& success) {
     typename corrected_arg<T>::real p{}; // Player*
     if (success) {
         success = dv.getTo(p);
@@ -45,7 +45,7 @@ template <typename T, size_t I = 0>
 }
 template <typename T, size_t I = 0>
     requires(!corrected_arg<T>::add_pointer)
-[[nodiscard]] inline corrected_arg<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& success) {
+[[nodiscard]] constexpr corrected_arg<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& success) {
     typename corrected_arg<T>::real p{};
     if (success) {
         success = dv.getTo(p);
@@ -55,7 +55,7 @@ template <typename T, size_t I = 0>
 }
 
 template <typename T, size_t I = 0, size_t Req = I, typename Def = std::tuple<>>
-[[nodiscard]] inline corrected_arg<T>::hold_type
+[[nodiscard]] constexpr corrected_arg<T>::hold_type
 unpackWithDefault(std::vector<DynamicValue>& dv, ll::Expected<>& success, Def const& defaultArgs) {
     if constexpr (I >= Req) {
         if (success && (I >= dv.size() || dv[I].is_null())) {
@@ -183,7 +183,7 @@ template <size_t ArgsCount, size_t RequiredCount, typename Fn, typename Ret, typ
 }
 
 template <size_t ArgsCount, size_t RequiredCount, size_t NonOptionalArgsCount>
-[[nodiscard]] inline bool normalizeArgs(std::vector<DynamicValue>& args) {
+[[nodiscard]] constexpr bool normalizeArgs(std::vector<DynamicValue>& args) {
     if constexpr (NonOptionalArgsCount > 0)
         if (args.size() < NonOptionalArgsCount) {
             return false;

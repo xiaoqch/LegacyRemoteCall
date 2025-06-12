@@ -11,8 +11,8 @@ using DefaultTag  = PriorityTag<5>;
 using LowTag      = PriorityTag<3>;
 
 template <size_t P = 10>
-constexpr auto Priority = PriorityTag<P>{};
+inline constexpr auto Priority = PriorityTag<P>{};
 
-[[maybe_unused]] constexpr auto Hightest = Priority<10>;
+inline constexpr auto Hightest = Priority<10>;
 
 } // namespace remote_call::priority

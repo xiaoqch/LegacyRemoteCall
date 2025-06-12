@@ -6,7 +6,6 @@
 #include "mc/deps/core/utility/optional_ref.h"
 #include "remote_call/api/base/Concepts.h"
 #include "remote_call/api/base/TypeTraits.h"
-#include "remote_call/api/conversions/AdlSerializer.h"
 #include "remote_call/api/conversions/detail/Detail.h"
 #include "remote_call/api/value/Base.h"
 
@@ -16,58 +15,55 @@ namespace remote_call {
 
 namespace error_utils {
 template <typename Target, typename... Expected>
-inline ll::Unexpected makeFromDynamicTypeError(DynamicValue const& value);
+LL_CONSTEXPR23 ll::Unexpected makeFromDynamicTypeError(DynamicValue const& value);
 }
 
 
-using detail::ElementType;
+using detail::DynamicElement;
 using detail::NULL_VALUE;
 using detail::NullType;
-using ObjectType  = detail::ObjectTypeBase<DynamicValue>;
-using ArrayType   = detail::ArrayTypeBase<DynamicValue>;
-using VariantType = detail::VariantTypeBase<DynamicValue>;
+using DynamicObject  = detail::DynamicObjectBase<DynamicValue>;
+using DynamicArray   = detail::DynamicArrayBase<DynamicValue>;
+using DynamicVariant = detail::DynamicVariantBase<DynamicValue, DynamicElement>;
+
 template <typename T>
-concept IsAnyDynamicElement = ll::concepts::IsOneOf<T, AllElementTypes, ElementType, ObjectType, ArrayType>;
+concept IsAnyDynamicElement = ll::concepts::IsOneOf<T, AllElementTypes, DynamicElement, DynamicObject, DynamicArray>;
 
-struct DynamicValue : public detail::DynamicBase<DynamicValue> {
-    using BaseType = detail::DynamicBase<DynamicValue>;
+struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
+    using BaseType = detail::DynamicBase<DynamicVariant>;
 
-    DynamicValue() : BaseType(ElementType{NULL_VALUE}) {};
-    DynamicValue(const DynamicValue&)            = delete;
-    DynamicValue(DynamicValue&&)                 = default;
-    DynamicValue& operator=(const DynamicValue&) = delete;
-    DynamicValue& operator=(DynamicValue&&)      = default;
+    constexpr DynamicValue() : BaseType(DynamicElement{NULL_VALUE}) {};
+    constexpr DynamicValue(const DynamicValue&)            = delete;
+    constexpr DynamicValue(DynamicValue&&)                 = default;
+    constexpr DynamicValue& operator=(const DynamicValue&) = delete;
+    constexpr DynamicValue& operator=(DynamicValue&&)      = default;
     template <typename T>
-        requires(!std::is_reference_v<T> && traits::is_variant_alternative_v<VariantType, T>)
-    explicit DynamicValue(T&& v) : BaseType(std::forward<T>(v)){};
+        requires(!std::is_reference_v<T> && traits::is_variant_alternative_v<DynamicVariant, T>)
+    constexpr explicit DynamicValue(T&& v) : BaseType(std::forward<T>(v)){};
     template <typename T>
-        requires(!std::is_reference_v<T> && traits::is_variant_alternative_v<VariantType, T>)
-    DynamicValue& operator=(T&& v) {
+        requires(!std::is_reference_v<T> && traits::is_variant_alternative_v<DynamicVariant, T>)
+    constexpr DynamicValue& operator=(T&& v) {
         this->emplace<T>(std::forward<T>(v));
         return *this;
     }
     template <typename T>
-        requires(requires(T&& v) { ElementType(std::forward<T>(v)); })
-    DynamicValue(T&& v) : BaseType(ElementType(std::forward<T>(v))){};
+        requires(requires(T&& v) { DynamicElement(std::forward<T>(v)); })
+    constexpr DynamicValue(T&& v) : BaseType(DynamicElement(std::forward<T>(v))){};
     template <concepts::SupportToDynamic T>
         requires(!requires(T&& v) {
-            ElementType(std::forward<T>(v));
+            DynamicElement(std::forward<T>(v));
         } && !std::same_as<T, DynamicValue> && !IsAnyDynamicElement<T>)
-    DynamicValue(T&& v) : BaseType() {
-        ll::Expected<> res = ::remote_call::toDynamic(*this, std::forward<T>(v));
-        if (!res) {
-            *this = {NULL_VALUE};
-            throw std::runtime_error(res.error().message());
-        }
+    LL_CONSTEXPR23 DynamicValue(T&& v) : BaseType() {
+        ::remote_call::toDynamic(*this, std::forward<T>(v)).value();
     };
     // template <concepts::SupportFromDynamic T>
-    // [[nodiscard]] inline operator T() & {
+    // [[nodiscard]] constexpr operator T() & {
     //     T v;
     //     ::remote_call::fromDynamic(*this, v);
     //     return std::forward<T>(v);
     // }
     // template <concepts::SupportFromDynamic T>
-    // [[nodiscard]] inline operator T() && {
+    // [[nodiscard]] constexpr operator T() && {
     //     T v;
     //     ::remote_call::fromDynamic(*this, v);
     //     return std::forward<T>(v);
@@ -75,44 +71,44 @@ struct DynamicValue : public detail::DynamicBase<DynamicValue> {
 
     template <ll::concepts::IsOneOf<AllElementTypes> T, class... Args>
     constexpr T& emplace(Args&&... val) {
-        return BaseType::emplace<ElementType>().template emplace<T>(std::forward<Args>(val)...);
+        return BaseType::emplace<DynamicElement>().template emplace<T>(std::forward<Args>(val)...);
     }
-    template <ll::concepts::IsOneOf<ElementType, ArrayType, ObjectType> T, class... Args>
+    template <ll::concepts::IsOneOf<DynamicElement, DynamicArray, DynamicObject> T, class... Args>
     constexpr T& emplace(Args&&... val) {
         return BaseType::emplace<T>(std::forward<Args>(val)...);
     }
 
-    [[nodiscard]] inline static DynamicValue object() { return DynamicValue{ObjectType{}}; }
-    [[nodiscard]] inline static DynamicValue array() { return DynamicValue{ArrayType{}}; }
+    [[nodiscard]] inline static DynamicValue    object() { return DynamicValue{DynamicObject{}}; }
+    [[nodiscard]] constexpr static DynamicValue array() { return DynamicValue{DynamicArray{}}; }
 
     template <IsAnyDynamicElement T>
-    [[nodiscard]] inline bool hold() const noexcept {
+    [[nodiscard]] constexpr bool hold() const noexcept {
         if constexpr (ll::concepts::IsOneOf<T, AllElementTypes>) {
-            return hold<ElementType>() && std::holds_alternative<T>(std::get<ElementType>(*this));
+            return hold<DynamicElement>() && std::holds_alternative<T>(std::get<DynamicElement>(*this));
         } else {
             return std::holds_alternative<T>(*this);
         }
     }
     template <IsAnyDynamicElement T>
-    [[nodiscard]] inline T const& get() const& {
+    [[nodiscard]] constexpr T const& get() const& {
         if constexpr (ll::concepts::IsOneOf<T, AllElementTypes>) {
-            return std::get<T>(std::get<ElementType>(*this));
+            return std::get<T>(std::get<DynamicElement>(*this));
         } else {
             return std::get<T>(*this);
         }
     }
     template <IsAnyDynamicElement T>
-    [[nodiscard]] inline T& get() & {
+    [[nodiscard]] constexpr T& get() & {
         if constexpr (ll::concepts::IsOneOf<T, AllElementTypes>) {
-            return std::get<T>(std::get<ElementType>(*this));
+            return std::get<T>(std::get<DynamicElement>(*this));
         } else {
             return std::get<T>(*this);
         }
     }
     template <IsAnyDynamicElement T>
-    [[nodiscard]] inline T&& get() && {
+    [[nodiscard]] constexpr T&& get() && {
         if constexpr (ll::concepts::IsOneOf<T, AllElementTypes>) {
-            return std::get<T>(std::get<ElementType>(std::move(*this)));
+            return std::get<T>(std::get<DynamicElement>(std::move(*this)));
         } else {
             return std::get<T>(std::move(*this));
         }
@@ -133,8 +129,8 @@ struct DynamicValue : public detail::DynamicBase<DynamicValue> {
     template <concepts::SupportFromDynamicC T>
         requires(!IsAnyDynamicElement<T>)
     [[nodiscard]] inline ll::Expected<> getTo(T& out) {
-        using Type = std::decay_t<decltype(*AdlSerializer<T>::fromDynamic(*this))>;
-        return AdlSerializer<T>::fromDynamic(*this).and_then([&](Type&& val) -> ll::Expected<> {
+        using Type = std::decay_t<decltype(*fromDynamic(*this, std::in_place_type<T>))>;
+        return fromDynamic(*this, std::in_place_type<T>).and_then([&](Type&& val) -> ll::Expected<> {
             out = std::forward<decltype(val)>(val);
             return {};
         });
@@ -142,37 +138,37 @@ struct DynamicValue : public detail::DynamicBase<DynamicValue> {
     template <concepts::SupportFromDynamicR T>
         requires(!IsAnyDynamicElement<T>)
     [[nodiscard]] inline ll::Expected<> getTo(T& out) {
-        return AdlSerializer<T>::fromDynamic(*this, out);
+        return fromDynamic(*this, out);
     }
     template <std::same_as<void> T>
-    [[nodiscard]] inline ll::Expected<T> tryGet() {
+    [[nodiscard]] LL_CONSTEXPR23 ll::Expected<T> tryGet() {
         // if (!is_null()) return error_utils::makeFromDynamicTypeError<T, NullType>(*this);
         return {};
     }
     template <concepts::SupportFromDynamicC T>
         requires(!std::is_lvalue_reference_v<T>)
-    [[nodiscard]] inline ll::Expected<T> tryGet() {
-        return AdlSerializer<T>::fromDynamic(*this);
+    [[nodiscard]] LL_CONSTEXPR23 ll::Expected<T> tryGet() {
+        return fromDynamic(*this, std::in_place_type<T>);
     }
     template <typename T>
         requires(!std::is_reference_v<T> && !concepts::SupportFromDynamicC<T> && concepts::SupportFromDynamicR<T>)
-    [[nodiscard]] inline ll::Expected<T> tryGet() {
+    [[nodiscard]] LL_CONSTEXPR23 ll::Expected<T> tryGet() {
         T v{};
-        return AdlSerializer<std::decay_t<T>>::fromDynamic(*this, v).transform([&]() { return std::move(v); });
+        return fromDynamic(*this, v).transform([&]() { return std::move(v); });
     }
     template <typename T>
         requires(std::is_lvalue_reference_v<T> && concepts::SupportFromDynamic<traits::reference_to_wrapper_t<T>>)
-    [[nodiscard]] inline ll::Expected<traits::reference_to_wrapper_t<T>> tryGet() {
+    [[nodiscard]] LL_CONSTEXPR23 ll::Expected<traits::reference_to_wrapper_t<T>> tryGet() {
         return tryGet<traits::reference_to_wrapper_t<T>>();
     }
     template <typename T>
         requires((std::is_rvalue_reference_v<T> || (std::is_lvalue_reference_v<T> && std::is_const_v<std::remove_reference_t<T>>)) && concepts::SupportFromDynamic<std::decay_t<T>>)
-    [[nodiscard]] inline ll::Expected<std::decay_t<T>> tryGet() {
+    [[nodiscard]] LL_CONSTEXPR23 ll::Expected<std::decay_t<T>> tryGet() {
         return tryGet<std::decay_t<T>>();
     }
 
     template <concepts::SupportFromDynamicC T>
-    [[nodiscard]] inline std::optional<T> tryGet(ll::Expected<>& success) {
+    [[nodiscard]] constexpr std::optional<T> tryGet(ll::Expected<>& success) {
         auto result = tryGet<T>();
         if (result) return *std::move(result);
         success = ll::forwardError(result.error());
@@ -180,7 +176,7 @@ struct DynamicValue : public detail::DynamicBase<DynamicValue> {
     }
     template <concepts::SupportFromDynamicR T>
         requires(!concepts::SupportFromDynamicC<T>)
-    [[nodiscard]] inline std::optional<T> tryGet(ll::Expected<>& success) {
+    [[nodiscard]] constexpr std::optional<T> tryGet(ll::Expected<>& success) {
         if (success) {
             T v{};
             success = getTo(v);
@@ -190,7 +186,7 @@ struct DynamicValue : public detail::DynamicBase<DynamicValue> {
     }
     template <typename T>
         requires(std::is_lvalue_reference_v<T> && concepts::SupportFromDynamic<traits::reference_to_pointer_t<T>>)
-    [[nodiscard]] inline optional_ref<std::remove_reference_t<T>> tryGet(ll::Expected<>& success) {
+    [[nodiscard]] constexpr optional_ref<std::remove_reference_t<T>> tryGet(ll::Expected<>& success) {
         if (success) {
             traits::reference_to_pointer_t<T> ptr{};
             success = getTo(ptr);
@@ -200,98 +196,96 @@ struct DynamicValue : public detail::DynamicBase<DynamicValue> {
     }
     template <typename T>
     [[nodiscard]] inline static ll::Expected<> from(DynamicValue& dv, T&& v) {
-        return AdlSerializer<std::decay_t<T>>::toDynamic(dv, std::forward<T>(v));
+        return toDynamic(dv, std::forward<T>(v));
     }
 
     template <typename T>
     [[nodiscard]] inline static ll::Expected<DynamicValue> from(T&& v) {
         DynamicValue dv{NULL_VALUE};
-        return AdlSerializer<std::decay_t<T>>::toDynamic(dv, std::forward<T>(v)).transform([&]() {
-            return std::move(dv);
-        });
+        return toDynamic(dv, std::forward<T>(v)).transform([&]() { return std::move(dv); });
     }
 
-    [[nodiscard]] inline bool is_array() const noexcept { return hold<ArrayType>(); }
-    [[nodiscard]] inline bool is_boolean() const noexcept { return hold<bool>(); }
-    [[nodiscard]] inline bool is_null() const noexcept { return hold<nullptr_t>(); }
-    [[nodiscard]] inline bool is_object() const noexcept { return hold<ObjectType>(); }
-    [[nodiscard]] inline bool is_string() const noexcept { return hold<std::string>(); }
-    [[nodiscard]] inline bool is_number() const noexcept { return hold<NumberType>(); }
-    [[nodiscard]] inline bool is_structured() const noexcept { return is_array() || is_object(); }
+    [[nodiscard]] constexpr bool is_array() const noexcept { return hold<DynamicArray>(); }
+    [[nodiscard]] constexpr bool is_boolean() const noexcept { return hold<bool>(); }
+    [[nodiscard]] constexpr bool is_null() const noexcept { return hold<nullptr_t>(); }
+    [[nodiscard]] constexpr bool is_object() const noexcept { return hold<DynamicObject>(); }
+    [[nodiscard]] constexpr bool is_string() const noexcept { return hold<std::string>(); }
+    [[nodiscard]] constexpr bool is_number() const noexcept { return hold<NumberType>(); }
+    [[nodiscard]] constexpr bool is_structured() const noexcept { return is_array() || is_object(); }
 
-    [[nodiscard]] inline size_t size() const noexcept {
-        if (hold<ElementType>()) {
+    [[nodiscard]] constexpr size_t size() const noexcept {
+        if (hold<DynamicElement>()) {
             if (is_null()) return 0;
             return 1;
         }
-        if (is_object()) return get<ObjectType>().size();
-        if (is_array()) return get<ArrayType>().size();
+        if (is_object()) return get<DynamicObject>().size();
+        if (is_array()) return get<DynamicArray>().size();
         return 0;
     }
     // Object
-    [[nodiscard]] inline bool contains(std::string const& key) const noexcept {
-        if (!hold<ObjectType>()) return false;
-        return get<ObjectType>().contains(key);
+    [[nodiscard]] constexpr bool contains(std::string const& key) const noexcept {
+        if (!hold<DynamicObject>()) return false;
+        return get<DynamicObject>().contains(key);
     }
     [[nodiscard]] inline DynamicValue const& operator[](std::string const& index) const {
-        if (!hold<ObjectType>()) {
+        if (!hold<DynamicObject>()) {
             throw std::runtime_error("value not hold an object");
         }
-        return get<ObjectType>().at(index);
+        return get<DynamicObject>().at(index);
     }
-    [[nodiscard]] inline DynamicValue& operator[](std::string const& index) {
-        if (!hold<ObjectType>()) {
+    [[nodiscard]] constexpr DynamicValue& operator[](std::string const& index) {
+        if (!hold<DynamicObject>()) {
             if (hold<NullType>()) {
-                return emplace<ObjectType>()[index];
+                return emplace<DynamicObject>()[index];
             }
             throw std::runtime_error("value not hold an object");
         }
-        return get<ObjectType>()[index];
+        return get<DynamicObject>()[index];
     }
 
-    [[nodiscard]] inline DynamicValue& operator[](std::string_view index) { return (*this)[std::string{index}]; }
+    [[nodiscard]] constexpr DynamicValue& operator[](std::string_view index) { return (*this)[std::string{index}]; }
     template <size_t N>
-    [[nodiscard]] inline DynamicValue& operator[](const char (&index)[N]) {
+    [[nodiscard]] constexpr DynamicValue& operator[](const char (&index)[N]) {
         return (*this)[std::string_view{index, N - 1}];
     }
-    [[nodiscard]] inline auto const& items() const {
-        if (!hold<ObjectType>()) {
+    [[nodiscard]] constexpr auto const& items() const {
+        if (!hold<DynamicObject>()) {
             throw std::runtime_error("value not hold an object");
         }
-        return get<ObjectType>();
+        return get<DynamicObject>();
     }
-    [[nodiscard]] inline auto& items() {
-        if (!hold<ObjectType>()) {
+    [[nodiscard]] constexpr auto& items() {
+        if (!hold<DynamicObject>()) {
             throw std::runtime_error("value not hold an object");
         }
-        return get<ObjectType>();
+        return get<DynamicObject>();
     }
     // Array
-    [[nodiscard]] inline DynamicValue const& operator[](size_t index) const {
+    [[nodiscard]] constexpr DynamicValue const& operator[](size_t index) const {
         if (!is_array()) {
             throw std::runtime_error("value not hold an array");
         }
-        return get<ArrayType>().at(index);
+        return get<DynamicArray>().at(index);
     }
-    [[nodiscard]] inline DynamicValue& operator[](size_t index) {
+    [[nodiscard]] constexpr DynamicValue& operator[](size_t index) {
         if (!is_array()) {
             throw std::runtime_error("value not hold an array");
         }
-        return get<ArrayType>()[index];
+        return get<DynamicArray>()[index];
     }
     template <typename... Args>
         requires(requires(Args... args) { DynamicValue(std::forward<Args>(args)...); })
-    inline DynamicValue& emplace_back(Args... args) {
+    constexpr DynamicValue& emplace_back(Args... args) {
         if (!is_array()) {
-            if (is_null()) return emplace<ArrayType>().emplace_back(args...);
+            if (is_null()) return emplace<DynamicArray>().emplace_back(args...);
             throw std::runtime_error("");
         }
-        return get<ArrayType>().emplace_back(args...);
+        return get<DynamicArray>().emplace_back(args...);
     }
-    [[nodiscard]] inline operator std::string const&() const { return get<std::string>(); };
-    // [[nodiscard]] inline operator std::string&() & { return get<std::string>(); };
-    [[nodiscard]] inline operator std::string&&() && { return std::move(get<std::string>()); };
-    [[nodiscard]] inline operator std::string_view() const { return get<std::string>(); };
+    [[nodiscard]] constexpr operator std::string const&() const { return get<std::string>(); };
+    // [[nodiscard]] constexpr operator std::string&() & { return get<std::string>(); };
+    [[nodiscard]] constexpr operator std::string&&() && { return std::move(get<std::string>()); };
+    [[nodiscard]] constexpr operator std::string_view() const { return get<std::string>(); };
 };
 
 // NOLINTEND: google-explicit-constructor

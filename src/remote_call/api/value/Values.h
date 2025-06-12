@@ -4,7 +4,6 @@
 #include "mc/nbt/CompoundTag.h"
 #include "mc/world/item/ItemStack.h"
 #include "mc/world/level/BlockPos.h"
-#include "remote_call/api/base/Concepts.h"
 
 
 class Block;
@@ -22,25 +21,25 @@ struct MayUniquePtr {
     T const* ptr = nullptr;
     bool     own = false;
 
-    MayUniquePtr(const MayUniquePtr&) = delete;
-    MayUniquePtr(MayUniquePtr&& o) : ptr(o.ptr), own(o.own) { o.own = false; };
-    MayUniquePtr& operator=(const MayUniquePtr&) = delete;
-    MayUniquePtr& operator=(MayUniquePtr&& o) {
+    constexpr MayUniquePtr(const MayUniquePtr&) = delete;
+    constexpr MayUniquePtr(MayUniquePtr&& o) : ptr(o.ptr), own(o.own) { o.own = false; };
+    constexpr MayUniquePtr& operator=(const MayUniquePtr&) = delete;
+    constexpr MayUniquePtr& operator=(MayUniquePtr&& o) {
         if (own && ptr) delete ptr;
         ptr   = o.ptr;
         own   = o.own;
         o.own = false;
         return *this;
     };
-    MayUniquePtr(std::unique_ptr<T>&& tag) : ptr(tag.release()), own(true) {};
-    MayUniquePtr(std::unique_ptr<T> const& tag) : ptr(tag.get()), own(false) {};
-    MayUniquePtr(T const* ptr) : ptr(ptr), own(false) {};
-    ~MayUniquePtr() {
+    constexpr MayUniquePtr(std::unique_ptr<T>&& tag) : ptr(tag.release()), own(true) {};
+    constexpr MayUniquePtr(std::unique_ptr<T> const& tag) : ptr(tag.get()), own(false) {};
+    constexpr MayUniquePtr(T const* ptr) : ptr(ptr), own(false) {};
+    constexpr ~MayUniquePtr() {
         if (own && ptr) delete ptr;
         own = false;
         ptr = nullptr;
     }
-    [[nodiscard]] inline std::unique_ptr<T> tryGetUniquePtr() {
+    [[nodiscard]] constexpr std::unique_ptr<T> tryGetUniquePtr() {
         if (!own) {
             if (!ptr) return {};
             return std::make_unique<T>(*ptr); // clone
@@ -49,17 +48,17 @@ struct MayUniquePtr {
         return std::unique_ptr<T>(const_cast<T*>(ptr));
     }
     template <typename RTN = T const*>
-    [[nodiscard]] inline RTN get() = delete;
+    [[nodiscard]] constexpr RTN get() = delete;
     template <>
-    [[nodiscard]] inline T const* get() {
+    [[nodiscard]] constexpr T const* get() {
         return ptr;
     };
     template <>
-    [[nodiscard]] inline T* get() {
+    [[nodiscard]] constexpr T* get() {
         return const_cast<T*>(ptr);
     };
     template <>
-    [[nodiscard]] inline std::unique_ptr<T> get() {
+    [[nodiscard]] constexpr std::unique_ptr<T> get() {
         return tryGetUniquePtr();
     };
 };
@@ -69,17 +68,14 @@ struct ItemType : public MayUniquePtr<ItemStack> {};
 
 struct BlockType {
     Block const* block;
-    BlockPos     blockPos;
-    int          dimension;
+    BlockPos     blockPos{};
+    int          dimension = 0;
 
-    BlockType(Block const* ptr) : block(ptr) {
-        blockPos  = BlockPos::ZERO();
-        dimension = 0;
-    };
+    constexpr BlockType(Block const* ptr) : block(ptr) {};
     template <typename RTN>
-    [[nodiscard]] inline RTN get() = delete;
+    [[nodiscard]] constexpr RTN get() = delete;
     template <>
-    [[nodiscard]] inline Block const* get() {
+    [[nodiscard]] constexpr Block const* get() {
         return block;
     };
 };
@@ -88,84 +84,89 @@ struct NumberType {
     __int64 i = 0;
     double  f = 0;
 
-    NumberType(__int64 i, double f) : i(i), f(f) {};
+    constexpr NumberType(__int64 i, double f) : i(i), f(f) {};
     template <typename T>
         requires(std::is_integral_v<T> || std::is_floating_point_v<T>)
-    NumberType& operator=(T v) {
+    constexpr NumberType& operator=(T v) {
         i = static_cast<__int64>(v);
         f = static_cast<double>(v);
+        return *this;
     }
-    NumberType(double v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    NumberType(float v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    NumberType(__int64 v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    NumberType(int v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    NumberType(short v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    NumberType(char v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    NumberType(unsigned __int64 v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    NumberType(unsigned int v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    NumberType(unsigned short v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    NumberType(unsigned char v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    constexpr NumberType(double v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    constexpr NumberType(float v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    constexpr NumberType(__int64 v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    constexpr NumberType(int v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    constexpr NumberType(short v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    constexpr NumberType(char v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    constexpr NumberType(unsigned __int64 v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    constexpr NumberType(unsigned int v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    constexpr NumberType(unsigned short v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
+    constexpr NumberType(unsigned char v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
     template <typename RTN>
         requires(std::is_integral_v<RTN> && !ll::traits::is_char_v<RTN>)
-    [[nodiscard]] inline RTN get() const {
+    [[nodiscard]] constexpr RTN get() const {
         return static_cast<RTN>(i);
     };
     template <typename RTN>
         requires(std::is_floating_point_v<RTN>)
-    [[nodiscard]] inline RTN get() const {
+    [[nodiscard]] constexpr RTN get() const {
         return static_cast<RTN>(f);
     };
 };
 
 struct WorldPosType {
-    Vec3 pos   = Vec3::ZERO();
+    Vec3 pos{};
     int  dimId = 3; // VanillaDimensions::Undefined;
 
-    WorldPosType(Vec3 const& pos, int dimId = 3) : pos(pos), dimId(dimId) {};
-    WorldPosType(std::pair<Vec3, int> const& pos) : pos(pos.first), dimId(pos.second) {};
+    constexpr WorldPosType(Vec3 const& pos, int dimId = 3) : pos(pos), dimId(dimId) {};
+    constexpr WorldPosType(std::pair<Vec3, int> const& pos) : pos(pos.first), dimId(pos.second) {};
     template <typename RTN>
-    [[nodiscard]] inline RTN get() = delete;
+    [[nodiscard]] constexpr RTN get() = delete;
     template <>
-    [[nodiscard]] inline Vec3 get() {
+    [[nodiscard]] constexpr Vec3 get() {
         return pos;
     };
     template <>
-    [[nodiscard]] inline BlockPos get() {
-        return BlockPos(pos);
+    [[nodiscard]] constexpr BlockPos get() {
+        BlockPos res{};
+        res.x = static_cast<int>(this->pos.x);
+        res.y = static_cast<int>(this->pos.y);
+        res.y = static_cast<int>(this->pos.y);
+        return res;
     };
     template <>
-    [[nodiscard]] inline std::pair<Vec3, int> get() {
+    [[nodiscard]] constexpr std::pair<Vec3, int> get() {
         return std::make_pair(pos, dimId);
     };
     template <>
-    [[nodiscard]] inline std::pair<BlockPos, int> get() {
-        return std::make_pair(BlockPos(pos), dimId);
+    [[nodiscard]] constexpr std::pair<BlockPos, int> get() {
+        return std::make_pair(get<BlockPos>(), dimId);
     };
 };
 
 struct BlockPosType {
-    BlockPos pos   = BlockPos::ZERO();
+    BlockPos pos{};
     int      dimId = 3; // VanillaDimensions::Undefined;
 
-    BlockPosType(BlockPos const& pos, int dimId = 0) : pos(pos), dimId(dimId) {};
-    BlockPosType(std::pair<BlockPos, int> const& pos) : pos(pos.first), dimId(pos.second) {};
+    constexpr BlockPosType(BlockPos const& pos, int dimId = 0) : pos(pos), dimId(dimId) {};
+    constexpr BlockPosType(std::pair<BlockPos, int> const& pos) : pos(pos.first), dimId(pos.second) {};
     template <typename RTN>
-    [[nodiscard]] inline RTN get() = delete;
+    [[nodiscard]] constexpr RTN get() = delete;
     template <>
-    [[nodiscard]] inline BlockPos get() {
+    [[nodiscard]] constexpr BlockPos get() {
         return pos;
     };
     template <>
-    [[nodiscard]] inline std::pair<BlockPos, int> get() {
+    [[nodiscard]] constexpr std::pair<BlockPos, int> get() {
         return std::make_pair(pos, dimId);
     };
     template <>
-    [[nodiscard]] inline Vec3 get() {
-        return pos;
+    [[nodiscard]] constexpr Vec3 get() {
+        return {static_cast<float>(this->pos.x), static_cast<float>(this->pos.y), static_cast<float>(this->pos.y)};
     };
     template <>
-    [[nodiscard]] inline std::pair<Vec3, int> get() {
-        return std::make_pair(pos, dimId);
+    [[nodiscard]] constexpr std::pair<Vec3, int> get() {
+        return std::make_pair(get<Vec3>(), dimId);
     };
 };
 

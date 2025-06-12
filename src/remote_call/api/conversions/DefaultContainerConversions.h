@@ -7,7 +7,6 @@
 #include "magic_enum.hpp"
 #include "remote_call/api/base/Concepts.h"
 #include "remote_call/api/base/Meta.h"
-#include "remote_call/api/conversions/AdlSerializer.h"
 #include "remote_call/api/reflection/Reflection.h"
 #include "remote_call/api/reflection/TypeName.h"
 #include "remote_call/api/utils/ErrorUtils.h"
@@ -41,7 +40,7 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
 }
 template <ll::concepts::IsOptional T>
     requires(concepts::SupportFromDynamic<typename std::remove_cvref_t<T>::value_type> && !std::is_default_constructible_v<typename std::remove_cvref_t<T>::value_type>)
-inline ll::Expected<T> fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, priority::HightTag) {
+LL_CONSTEXPR23 ll::Expected<T> fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, priority::HightTag) {
     using ValueType = std::remove_cvref_t<T>::value_type;
     if (dv.hold<NullType>()) {
         return {};
@@ -98,7 +97,7 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& tuple, ll::meta::PriorityT
 template <concepts::IsTupleLike T>
     requires(std::is_default_constructible_v<T>)
 inline ll::Expected<> fromDynamic(DynamicValue& dv, T& tuple, ll::meta::PriorityTag<2>) {
-    if (!dv.is_array()) return error_utils::makeFromDynamicTypeError<T, ArrayType>(dv);
+    if (!dv.is_array()) return error_utils::makeFromDynamicTypeError<T, DynamicArray>(dv);
     if (dv.size() != std::tuple_size_v<T>)
         return error_utils::makeError(
             error_utils::ErrorReason::IndexOutOfRange,
@@ -185,7 +184,7 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& arr, ll::meta::PriorityTag
 template <ll::concepts::ArrayLike T>
     requires(requires() { typename T::value_type; })
 inline ll::Expected<> fromDynamic(DynamicValue& dv, T& arr, ll::meta::PriorityTag<1>) {
-    if (!dv.is_array()) return error_utils::makeFromDynamicTypeError<T, ArrayType>(dv);
+    if (!dv.is_array()) return error_utils::makeFromDynamicTypeError<T, DynamicArray>(dv);
     using value_type = typename T::value_type;
     if constexpr (requires() { arr.clear(); }) {
         arr.clear();
@@ -244,7 +243,7 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& map, ll::meta::PriorityTa
         "the key type of the associative container must be convertible "
         "to a string"
     );
-    if (!dv.is_object()) return error_utils::makeFromDynamicTypeError<T, ObjectType>(dv);
+    if (!dv.is_object()) return error_utils::makeFromDynamicTypeError<T, DynamicObject>(dv);
     map.clear();
     for (auto&& [k, v] : dv.items()) {
         if constexpr (std::is_enum_v<typename T::key_type>) {
@@ -295,7 +294,7 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& obj, ll::meta::PriorityTag
 template <ll::reflection::Reflectable T>
     requires(std::is_default_constructible_v<T>)
 inline ll::Expected<> fromDynamic(DynamicValue& dv, T& obj, ll::meta::PriorityTag<1>) {
-    if (!dv.is_object()) return error_utils::makeFromDynamicTypeError<T, ObjectType>(dv);
+    if (!dv.is_object()) return error_utils::makeFromDynamicTypeError<T, DynamicObject>(dv);
     ll::Expected<> res;
     reflection::forEachMember(obj, [&](std::string_view name, auto& member) {
         if (name.starts_with('$') || !res) {
@@ -367,7 +366,7 @@ fromDynamicReflectableImpl(DynamicValue& dv, std::in_place_type_t<boost::pfr::de
 template <ll::reflection::Reflectable T>
     requires(!std::is_default_constructible_v<T>)
 ll::Expected<T> fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, ll::meta::PriorityTag<1>) {
-    if (!dv.is_object()) return error_utils::makeFromDynamicTypeError<T, ObjectType>(dv);
+    if (!dv.is_object()) return error_utils::makeFromDynamicTypeError<T, DynamicObject>(dv);
     constexpr size_t size = ll::reflection::member_count_v<T>;
     using TupleType       = std::decay_t<decltype(boost::pfr::detail::tie_as_tuple(std::declval<T&>()))>;
     return fromDynamicReflectableImpl<T>(dv, std::in_place_type<TupleType>, std::make_index_sequence<size>{});
@@ -392,14 +391,14 @@ static_assert(IsOptionalRef<optional_ref<Actor>>);
 // optional_ref;
 template <concepts::IsOptionalRef T>
     requires(concepts::SupportFromDynamic<decltype(std::declval<T>().as_ptr())>)
-inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::LowTag) {
+LL_CONSTEXPR23 ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::LowTag) {
     if (t.has_value()) return ::remote_call::toDynamic(dv, std::forward<T>(t).as_ptr());
     else dv.emplace<NullType>(NullValue);
     return {};
 }
 template <concepts::IsOptionalRef T>
     requires(concepts::SupportFromDynamic<decltype(std::declval<T>().as_ptr())>)
-inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::DefaultTag) {
+LL_CONSTEXPR23 ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::DefaultTag) {
     if (dv.hold<NullType>()) {
         t = {};
         return {};

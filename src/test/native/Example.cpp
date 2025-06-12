@@ -1,7 +1,5 @@
-#include "test/native/Test.h"
-
 /** Example */
-
+#include "Test.h"
 #include "ll/api/Expected.h"
 #include "ll/api/event/EventBus.h"
 #include "ll/api/event/server/ServerStartedEvent.h"

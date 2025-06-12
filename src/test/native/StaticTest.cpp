@@ -83,20 +83,7 @@ public:
     explicit StaticCustomType(ItemInstance item) : std::variant<std::string, ItemInstance>(item) {}
 };
 
-#if false
-template <>
-struct ::remote_call::AdlSerializer<StaticCustomType> {
-    inline static ll::Expected<StaticCustomType> fromDynamic(DynamicValue& dv) {
-        if (dv.hold<std::string>()) {
-            return StaticCustomType(dv.get<std::string>());
-        } else if (dv.hold<ItemType>()) {
-            return StaticCustomType(ItemInstance(*dv.get<ItemType>().ptr));
-        } else {
-            return ll::makeStringError("Invalid type");
-        }
-    }
-};
-#else
+
 ll::Expected<StaticCustomType>
 fromDynamic(remote_call::DynamicValue& dv, std::in_place_type_t<StaticCustomType>, remote_call::priority::HightTag) {
     if (dv.hold<std::string>()) {
@@ -107,7 +94,6 @@ fromDynamic(remote_call::DynamicValue& dv, std::in_place_type_t<StaticCustomType
         return ll::makeStringError("Invalid type");
     }
 }
-#endif
 
 template <typename T>
     requires(std::same_as<std::decay_t<T>, StaticCustomType>)
@@ -125,8 +111,8 @@ ll::Expected<> toDynamic(remote_call::DynamicValue& dv, T&& v, remote_call::prio
 }
 
 struct CustomTypeWrapper {
-    std::string name;
-    StaticCustomType  customType;
+    std::string      name;
+    StaticCustomType customType;
 };
 namespace remote_call::test {
 
@@ -138,14 +124,12 @@ static_assert(FullSupported<std::unordered_map<std::string, CustomTypeWrapper>>)
 static_assert(FullSupported<std::tuple<std::string, CustomTypeWrapper>>);
 inline void testConvert(DynamicValue dv, [[maybe_unused]] ll::Expected<> res) {
     // fromDynamic1(dv, std::in_place_type<std::optional<StaticCustomType>>, priority::Hightest);
-    (void)AdlSerializer<StaticCustomType>::fromDynamic(dv);
     (void)dv.tryGet<std::optional<StaticCustomType>>();
     (void)dv.tryGet<std::vector<StaticCustomType>>();
     (void)dv.tryGet<std::array<StaticCustomType, 10>>();
     (void)dv.tryGet<std::tuple<StaticCustomType, int>>();
     (void)dv.tryGet<std::unordered_map<std::string, StaticCustomType>>();
 
-    (void)AdlSerializer<CustomTypeWrapper>::fromDynamic(dv);
     (void)dv.tryGet<std::optional<CustomTypeWrapper>>();
     (void)dv.tryGet<std::vector<CustomTypeWrapper>>();
     (void)dv.tryGet<std::array<CustomTypeWrapper, 10>>();
@@ -209,7 +193,7 @@ template <IsOptionalRef T>
     requires(concepts::SupportFromDynamic<decltype(std::declval<T>().as_ptr())>)
 ll::Expected<> toDynamic1(DynamicValue& dv, T&& t, priority::LowTag) {
     if (t.has_value()) return ::remote_call::toDynamic(dv, std::forward<T>(t).as_ptr());
-    else dv.emplace<ElementType>(NULL_VALUE);
+    else dv.emplace<DynamicElement>(NULL_VALUE);
     return {};
 }
 template <IsOptionalRef T>

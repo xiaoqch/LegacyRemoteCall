@@ -25,9 +25,9 @@ template <> consteval std::string_view typeName<BlockPosType>() { return "BlockP
 template <> consteval std::string_view typeName<ItemType>() { return "ItemType"; }
 template <> consteval std::string_view typeName<BlockType>() { return "BlockType"; }
 template <> consteval std::string_view typeName<NbtType>() { return "NbtType"; }
-template <> consteval std::string_view typeName<ObjectType>() { return "ObjectType"; }
-template <> consteval std::string_view typeName<ArrayType>() { return "ArrayType"; }
-template <> consteval std::string_view typeName<VariantType>() { return "VariantType"; }
+template <> consteval std::string_view typeName<DynamicObject>() { return "DynamicObject"; }
+template <> consteval std::string_view typeName<DynamicArray>() { return "DynamicArray"; }
+template <> consteval std::string_view typeName<DynamicVariant>() { return "DynamicVariant"; }
 template <> consteval std::string_view typeName<DynamicValue>() { return "DynamicValue"; }
 // clang-format on
 
@@ -49,7 +49,7 @@ template <ll::FixedString sep, typename... T, size_t... N>
 }
 
 template <ll::FixedString sep, typename... T>
-constexpr auto type_list_name_impl_v = typeListNameImpl<sep, T...>(std::index_sequence_for<T...>{});
+inline constexpr auto type_list_name_impl_v = typeListNameImpl<sep, T...>(std::index_sequence_for<T...>{});
 
 template <ll::FixedString sep = "|", typename... T>
 [[nodiscard]] consteval auto typeListName() {
@@ -69,10 +69,10 @@ static_assert(typeListName<>() == "void");
 static_assert(typeListName<bool, std::string>() == "bool|std::string");
 
 
-[[nodiscard]] inline std::string_view typeName(DynamicValue const& dv) {
+[[nodiscard]] constexpr std::string_view typeName(DynamicValue const& dv) {
     constexpr auto getTypeName = [](auto&& v) { return typeName<std::decay_t<decltype(v)>>(); };
-    if (dv.hold<ElementType>()) {
-        return std::visit(getTypeName, dv.get<ElementType>());
+    if (dv.hold<DynamicElement>()) {
+        return std::visit(getTypeName, dv.get<DynamicElement>());
     } else {
         return std::visit(getTypeName, dv);
     }

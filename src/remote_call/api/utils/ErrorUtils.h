@@ -36,22 +36,22 @@ class RemoteCallError : public ll::ErrorInfoBase {
     std::optional<ll::Error>         mOriginError{};
 
 public:
-    RemoteCallError(ErrorReason reason, std::string&& msg, std::optional<ll::Error> originError = {}) noexcept
+    inline RemoteCallError(ErrorReason reason, std::string&& msg, std::optional<ll::Error> originError = {}) noexcept
     : mReason(reason),
       mMessage(std::move(msg)),
       mOriginError(std::move(originError)) {}
-    ~RemoteCallError() override = default;
-    [[nodiscard]] inline std::string message() const noexcept override {
+    inline ~RemoteCallError() override = default;
+    [[nodiscard]] constexpr std::string message() const noexcept override {
         if (!mOriginError) return mMessage;
         return fmt::format("{}\nOrigin Error: {}", mMessage, mOriginError->message());
     }
-    RemoteCallError& append(std::string_view msg) {
+    constexpr RemoteCallError& append(std::string_view msg) {
         if (!mMessage.ends_with("\n")) mMessage.append("\n");
         mMessage.append(msg);
         return *this;
     }
     template <typename Fn = void>
-    RemoteCallError& append(std::string_view ns, std::string_view func) {
+    inline RemoteCallError& append(std::string_view ns, std::string_view func) {
         if (!mMessage.ends_with("\n")) mMessage.append("\n");
         auto  provider     = getProvider(ns, func).lock();
         auto& providerName = provider ? provider->getName() : "UnknownMod";
@@ -64,11 +64,11 @@ public:
         ));
         return *this;
     }
-    RemoteCallError& joinField(std::string_view field) {
+    constexpr RemoteCallError& joinField(std::string_view field) {
         mFiled.emplace_back(field);
         return *this;
     }
-    RemoteCallError& flushFields(std::string_view msg, std::string_view valueName) {
+    constexpr RemoteCallError& flushFields(std::string_view msg, std::string_view valueName) {
         if (!mMessage.ends_with("\n")) mMessage.append("\n");
         if (msg.ends_with("\n")) msg.remove_suffix(1);
         std::string field = std::string(valueName);
@@ -77,16 +77,17 @@ public:
         mFiled.clear();
         return *this;
     }
-    [[nodiscard]] inline ErrorReason reason() const noexcept { return mReason; }
+    [[nodiscard]] constexpr ErrorReason reason() const noexcept { return mReason; }
 
-    [[nodiscard]] inline static bool isRemoteCallError(ll::Error& error) {
+    [[nodiscard]] LL_CONSTEXPR23 static bool isRemoteCallError(ll::Error& error) {
         /// TODO:
         return error.isA<RemoteCallError>();
     }
 };
 
 
-[[nodiscard]] inline std::unique_ptr<RemoteCallError> convertUnknownError(std::string_view msg, ll::Error&& error) {
+[[nodiscard]] LL_CONSTEXPR23 std::unique_ptr<RemoteCallError>
+                             convertUnknownError(std::string_view msg, ll::Error&& error) {
     return std::make_unique<RemoteCallError>(
         ErrorReason::Unknown,
         fmt::format("{}: {}", msg, error.as<ll::ErrorInfoBase>().message()),
@@ -94,7 +95,7 @@ public:
     );
 }
 
-[[nodiscard]] inline ll::Unexpected makeError(ErrorReason reason, std::string_view msg) {
+[[nodiscard]] LL_CONSTEXPR23 ll::Unexpected makeError(ErrorReason reason, std::string_view msg) {
     auto error = std::make_unique<RemoteCallError>(reason, std::string(msg));
     return ::nonstd::make_unexpected<ll::Error>(std::in_place, std::move(error));
 }
@@ -107,7 +108,7 @@ makeError(std::string_view ns, std::string_view func, ErrorReason reason, std::s
 }
 
 template <typename Fn>
-[[nodiscard]] inline ll::Unexpected
+[[nodiscard]] LL_CONSTEXPR23 ll::Unexpected
 makeUnknownError(std::string_view ns, std::string_view func, std::string_view msg, ll::Error&& error) {
     auto newError = convertUnknownError(msg, std::move(error));
     newError->append<Fn>(ns, func);
@@ -124,7 +125,8 @@ makeUnknownError(std::string_view ns, std::string_view func, std::string_view ms
 }
 
 template <typename Ret, typename... Args>
-[[nodiscard]] inline ll::Unexpected makeArgsCountError(std::string_view ns, std::string_view func, size_t provided) {
+[[nodiscard]] LL_CONSTEXPR23 ll::Unexpected
+                             makeArgsCountError(std::string_view ns, std::string_view func, size_t provided) {
     auto error = std::make_unique<RemoteCallError>(
         ErrorReason::ArgsCountNotMatch,
         fmt::format("Fail to invoke! function requires {} args, but {} provided.", sizeof...(Args), provided)
@@ -134,7 +136,7 @@ template <typename Ret, typename... Args>
 }
 
 template <typename Ret, typename... Args>
-[[nodiscard]] inline ll::Unexpected
+[[nodiscard]] LL_CONSTEXPR23 ll::Unexpected
 makeSerializeError(std::string_view ns, std::string_view func, std::string_view valueName, ll::Error& error) {
     if (RemoteCallError::isRemoteCallError(error)) {
         auto& newError = error.as<RemoteCallError>();
@@ -146,7 +148,7 @@ makeSerializeError(std::string_view ns, std::string_view func, std::string_view 
 }
 
 template <typename Ret, typename... Args>
-[[nodiscard]] inline ll::Unexpected
+[[nodiscard]] LL_CONSTEXPR23 ll::Unexpected
 makeDeserializeError(std::string_view ns, std::string_view func, std::string_view valueName, ll::Error& error) {
     if (RemoteCallError::isRemoteCallError(error)) {
         auto& newError = error.as<RemoteCallError>();
@@ -158,7 +160,8 @@ makeDeserializeError(std::string_view ns, std::string_view func, std::string_vie
 }
 
 template <typename Ret, typename... Args>
-[[nodiscard]] inline ll::Unexpected makeCallError(std::string_view ns, std::string_view func, ll::Error& error) {
+[[nodiscard]] LL_CONSTEXPR23 ll::Unexpected
+                             makeCallError(std::string_view ns, std::string_view func, ll::Error& error) {
     if (RemoteCallError::isRemoteCallError(error)) {
         auto& newError = error.as<RemoteCallError>();
         newError.append("Failed to call function!").append<Ret(Args...)>(ns, func);
@@ -168,7 +171,7 @@ template <typename Ret, typename... Args>
 }
 
 template <typename Target, typename... Expected>
-[[nodiscard]] inline ll::Unexpected makeFromDynamicTypeError(DynamicValue const& value) {
+[[nodiscard]] LL_CONSTEXPR23 ll::Unexpected makeFromDynamicTypeError(DynamicValue const& value) {
     return makeError(
         ErrorReason::UnexpectedType,
         fmt::format(
@@ -181,14 +184,14 @@ template <typename Target, typename... Expected>
 }
 
 template <typename T, typename Target>
-[[nodiscard]] inline ll::Unexpected makeUnsupportedValueError(std::string_view value, std::string_view msg) {
+[[nodiscard]] LL_CONSTEXPR23 ll::Unexpected makeUnsupportedValueError(std::string_view value, std::string_view msg) {
     return makeError(
         ErrorReason::UnsupportedValue,
         fmt::format("Failed to convert {}<{}> to {}. {}", type_raw_name_v<T>, value, type_raw_name_v<Target>, msg)
     );
 }
 
-[[nodiscard]] inline ll::Unexpected makeSerMemberError(std::string_view name, ll::Error& error) noexcept {
+[[nodiscard]] LL_CONSTEXPR23 ll::Unexpected makeSerMemberError(std::string_view name, ll::Error& error) noexcept {
     if (RemoteCallError::isRemoteCallError(error)) {
         error.as<RemoteCallError>().joinField(fmt::format(".{}", name));
         return ll::forwardError(error);
@@ -197,7 +200,7 @@ template <typename T, typename Target>
     newError->joinField(fmt::format(".{}", name));
     return ::nonstd::make_unexpected<ll::Error>(std::in_place, std::move(newError));
 }
-[[nodiscard]] inline ll::Unexpected makeSerIndexError(std::size_t idx, ll::Error& error) noexcept {
+[[nodiscard]] LL_CONSTEXPR23 ll::Unexpected makeSerIndexError(std::size_t idx, ll::Error& error) noexcept {
     if (RemoteCallError::isRemoteCallError(error)) {
         error.as<RemoteCallError>().joinField(fmt::format("[{}]", idx));
         return ll::forwardError(error);
@@ -207,7 +210,7 @@ template <typename T, typename Target>
     return ::nonstd::make_unexpected<ll::Error>(std::in_place, std::move(newError));
 }
 
-[[nodiscard]] inline ll::Unexpected makeSerKeyError(std::string_view key, ll::Error& error) noexcept {
+[[nodiscard]] LL_CONSTEXPR23 ll::Unexpected makeSerKeyError(std::string_view key, ll::Error& error) noexcept {
     if (RemoteCallError::isRemoteCallError(error)) {
         error.as<RemoteCallError>().joinField(fmt::format("[\"{}\"]", key));
         return ll::forwardError(error);

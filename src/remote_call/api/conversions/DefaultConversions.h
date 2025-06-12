@@ -14,7 +14,6 @@
 #include "remote_call/api/base/Meta.h"
 #include "remote_call/api/base/TypeTraits.h"
 #include "remote_call/api/utils/ErrorUtils.h"
-#include "remote_call/api/value/Base.h"
 #include "remote_call/api/value/DynamicValue.h"
 
 
@@ -70,14 +69,14 @@ struct CustomElementConverter {
 public:
     template <typename T = NativeType>
     static inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t)
-        requires(!IsUniquePtr<std::decay_t<T>>)
+        requires(!concepts::IsUniquePtr<std::decay_t<T>>)
     {
         dv.emplace<DynType>(std::forward<T>(t));
         return {};
     };
     template <typename T = NativeType>
     static inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t)
-        requires(IsUniquePtr<std::decay_t<T>>)
+        requires(concepts::IsUniquePtr<std::decay_t<T>>)
     {
         dv.emplace<DynType>(std::forward<T>(t));
         return {};
@@ -223,8 +222,8 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::LowTag) {
 // remote_call::DynamicValue -> T* -> std::reference_wrapper<T>
 template <typename T>
     requires(std::is_lvalue_reference_v<T> && concepts::SupportFromDynamic<traits::reference_to_pointer_t<T>>)
-inline ll::Expected<traits::reference_to_wrapper_t<T>>
-fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, priority::LowTag) {
+LL_CONSTEXPR23 ll::Expected<traits::reference_to_wrapper_t<T>>
+               fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, priority::LowTag) {
     return dv.tryGet<traits::reference_to_pointer_t<T>>().transform(
         [](auto&& ptr) -> traits::reference_to_wrapper_t<T> { return std::ref(*ptr); }
     );
@@ -233,8 +232,8 @@ fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, priority::LowTag) {
 // remote_call::DynamicValue -> T* -> std::reference_wrapper<T>
 template <typename T>
     requires(traits::is_reference_wrapper_v<T> && concepts::SupportFromDynamic<traits::reference_to_pointer_t<T>>)
-inline ll::Expected<traits::reference_to_wrapper_t<T>>
-fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, priority::LowTag) {
+LL_CONSTEXPR23 ll::Expected<traits::reference_to_wrapper_t<T>>
+               fromDynamic(DynamicValue& dv, std::in_place_type_t<T>, priority::LowTag) {
     return dv.tryGet<traits::reference_to_pointer_t<T>>().transform(
         [](auto&& ptr) -> traits::reference_to_wrapper_t<T> { return std::ref(*ptr); }
     );

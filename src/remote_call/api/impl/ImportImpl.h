@@ -39,13 +39,13 @@ importCallImpl(std::string const& nameSpace, std::string const& funcName, Args&&
     }
     auto const&  rawFunc = *res;
     DynamicValue params  = DynamicValue::array();
-    params.get<ArrayType>().reserve(sizeof...(Args));
+    params.get<DynamicArray>().reserve(sizeof...(Args));
     auto paramTuple = std::forward_as_tuple(std::forward<Args>(args)...);
 
     ll::Expected<> success = toDynamic(params, std::forward<decltype(paramTuple)>(paramTuple));
     if (!success) return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "args", success.error());
 
-    auto dynRet = rawFunc(std::move(params).get<ArrayType>());
+    auto dynRet = rawFunc(std::move(params).get<DynamicArray>());
     if (!dynRet) return error_utils::makeCallError<Ret, Args...>(nameSpace, funcName, dynRet.error());
 
     return dynRet->tryGet<RealRet>().or_else([&nameSpace, &funcName](auto&& err) -> ExpectedRet {
@@ -53,9 +53,8 @@ importCallImpl(std::string const& nameSpace, std::string const& funcName, Args&&
     });
 }
 
-
 template <typename Ret, typename... Args>
-[[nodiscard]] inline auto
+[[nodiscard]] constexpr auto
 importImpl(std::in_place_type_t<Ret(Args...)>, std::string const& nameSpace, std::string const& funcName) {
     checkUptrType<Ret>();
     using ExpectedRet = corrected_return<Ret>::Excepted;
@@ -74,7 +73,7 @@ template <ll::FixedString nameSpace, ll::FixedString funcName, typename Ret, typ
 }
 
 template <typename Ret>
-[[nodiscard]] inline auto importExImpl(std::string const& nameSpace, std::string const& funcName) {
+[[nodiscard]] constexpr auto importExImpl(std::string const& nameSpace, std::string const& funcName) {
     checkUptrType<Ret>();
     using ExpectedRet = corrected_return<Ret>::Excepted;
     return [nameSpace, funcName](auto&&... args) -> ExpectedRet {

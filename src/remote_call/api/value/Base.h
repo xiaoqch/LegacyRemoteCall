@@ -1,15 +1,15 @@
 #pragma once
 
-#include <cstddef>
-#include <string>
-#include <unordered_map>
+#include "ll/api/base/Containers.h" // IWYU pragma: keep
+
 #include <variant>
-#include <vector>
+
+// #define LRC_NEW_STRUCT
+
 class Player;
 class Actor;
 class BlockActor;
 class Container;
-using NullType = std::nullptr_t;
 
 namespace remote_call {
 
@@ -23,31 +23,56 @@ struct NbtType;
 
 namespace detail {
 
-/// TODO: std::nullptr_t -> std::monostate, move to first type
-#if false
+template <typename T>
+using DynamicArrayBase = std::vector<T>;
+template <typename T>
+#ifdef LRC_NEW_STRUCT
+using DynamicObjectBase = ll::SmallStringMap<T>;
+#else
+using DynamicObjectBase = std::unordered_map<std::string, T>;
+#endif
+template <typename T, typename... Ty>
+using DynamicVariantBase = std::variant<Ty..., DynamicArrayBase<T>, DynamicObjectBase<T>>;
+
+// For ADL
+template <typename T>
+class DynamicBase : public T {};
+
+#ifdef LRC_NEW_STRUCT
+
 #define AllElementTypes                                                                                                \
     std::monostate, bool, std::string, NumberType, Player*, Actor*, BlockActor*, Container*, WorldPosType,             \
         BlockPosType, ItemType, BlockType, NbtType
-using NullType = std::monostate;
-#else
-#define ExtraType                                                                                                      \
-    std::nullptr_t, NumberType, Player*, Actor*, BlockActor*, Container*, WorldPosType, BlockPosType, ItemType,        \
-        BlockType, NbtType
-#define AllElementTypes bool, std::string, ExtraType
-using NullType = std::nullptr_t;
-#endif
-constexpr NullType NULL_VALUE = NullType{}; // NOLINT: -Wunused-const-variable
 
-using ElementType = std::variant<AllElementTypes>;
-template <typename T>
-using ArrayTypeBase = std::vector<T>;
-template <typename T>
-using ObjectTypeBase = std::unordered_map<std::string, T>;
-template <typename T>
-using VariantTypeBase = std::variant<ElementType, ArrayTypeBase<T>, ObjectTypeBase<T>>;
-// For Adl
-template <typename T>
-class DynamicBase : public VariantTypeBase<T> {};
+using NullType = std::tuple_element_t<0, std::tuple<AllElementTypes>>;
+
+struct DynamicValue : public DynamicBase<DynamicVariantBase<DynamicValue, AllElementTypes>> {
+    constexpr DynamicValue()                               = default;
+    constexpr DynamicValue(const DynamicValue&)            = delete;
+    constexpr DynamicValue(DynamicValue&&)                 = default;
+    constexpr DynamicValue& operator=(const DynamicValue&) = delete;
+    constexpr DynamicValue& operator=(DynamicValue&&)      = default;
+    // clang-format off
+    template <typename T> [[nodiscard]] constexpr bool hold() const { return std::holds_alternative<T>(*this); }
+    template <typename T> [[nodiscard]] constexpr decltype(auto) get() const& { return std::get<T>(*this); }
+    template <typename T> [[nodiscard]] constexpr decltype(auto) get() const&& { return std::get<T>(std::move(*this)); }
+    template <typename T> [[nodiscard]] constexpr decltype(auto) get() & { return std::get<T>(*this); }
+    template <typename T> [[nodiscard]] constexpr decltype(auto) get() && { return std::get<T>(std::move(*this)); }
+    // clang-format on
+};
+
+#else
+
+using NullType       = std::nullptr_t;
+#define AllElementTypes                                                                                                \
+    bool, std::string, NullType, NumberType, Player*, Actor*, BlockActor*, Container*, WorldPosType, BlockPosType,     \
+        ItemType, BlockType, NbtType
+using DynamicElement = std::variant<AllElementTypes>;
+
+#endif
+
+inline constexpr NullType NULL_VALUE{};
 
 } // namespace detail
+
 } // namespace remote_call
