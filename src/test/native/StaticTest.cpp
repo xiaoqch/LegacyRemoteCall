@@ -43,7 +43,8 @@ static_assert(FullSupported<std::reference_wrapper<CompoundTag>>);
 
 // static_assert(FullSupported<Mob*>);
 static_assert(FullSupported<Player*>);
-static_assert(FullSupported<SimulatedPlayer const*>);
+static_assert(FullSupported<ServerPlayer*>);
+// static_assert(FullSupported<SimulatedPlayer const*>);
 
 static_assert(FullSupported<Block const*>);
 static_assert(FullSupported<BlockActor*>);

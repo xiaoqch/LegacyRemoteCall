@@ -15,7 +15,7 @@ void fromDynamic(DynamicValue&, T&, priority::PriorityTag<0>) = delete;
 
 struct FromDynamicFn {
     template <typename T>
-    [[nodiscard]] constexpr auto operator()(DynamicValue& dv, T& t) const
+    [[nodiscard]] LL_FORCEINLINE constexpr auto operator()(DynamicValue& dv, T& t) const
         noexcept(noexcept(fromDynamic(dv, t, priority::Hightest)))
         requires(std::is_default_constructible_v<T>&&requires() {
             { fromDynamic(dv, t, priority::Hightest) } -> ll::concepts::IsLeviExpected;
@@ -24,7 +24,7 @@ struct FromDynamicFn {
         return fromDynamic(dv, t, priority::Hightest);
     }
     template <typename T>
-    [[nodiscard]] constexpr auto operator()(DynamicValue& dv) const
+    [[nodiscard]] LL_FORCEINLINE constexpr auto operator()(DynamicValue& dv) const
         noexcept(noexcept(fromDynamic(dv, std::in_place_type<T>, priority::Hightest)))
         requires(requires() {
             { fromDynamic(dv, std::in_place_type<T>, priority::Hightest) } -> ll::concepts::IsLeviExpected;
@@ -33,6 +33,7 @@ struct FromDynamicFn {
         return fromDynamic(dv, std::in_place_type<T>, priority::Hightest);
     }
 };
+
 struct ToDynamicFn {
     template <typename T>
     [[nodiscard]] constexpr auto operator()(DynamicValue& dv, T&& val) const
@@ -43,11 +44,6 @@ struct ToDynamicFn {
     {
         return toDynamic(dv, std::forward<T>(val), priority::Hightest);
     }
-};
-
-template <typename T>
-struct static_const {
-    static inline constexpr T value{};
 };
 
 } // namespace detail

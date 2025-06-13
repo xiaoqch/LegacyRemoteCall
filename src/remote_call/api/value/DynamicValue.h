@@ -15,7 +15,7 @@ namespace remote_call {
 
 namespace error_utils {
 template <typename Target, typename... Expected>
-LL_CONSTEXPR23 ll::Unexpected makeFromDynamicTypeError(DynamicValue const& value);
+[[nodiscard]] LL_NOINLINE LL_CONSTEXPR23 ll::Unexpected makeFromDynamicTypeError(DynamicValue const& value);
 }
 
 
@@ -70,19 +70,19 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
     // }
 
     template <ll::concepts::IsOneOf<AllElementTypes> T, class... Args>
-    constexpr T& emplace(Args&&... val) {
+    LL_FORCEINLINE constexpr T& emplace(Args&&... val) {
         return BaseType::emplace<DynamicElement>().template emplace<T>(std::forward<Args>(val)...);
     }
     template <ll::concepts::IsOneOf<DynamicElement, DynamicArray, DynamicObject> T, class... Args>
-    constexpr T& emplace(Args&&... val) {
+    LL_FORCEINLINE constexpr T& emplace(Args&&... val) {
         return BaseType::emplace<T>(std::forward<Args>(val)...);
     }
 
-    [[nodiscard]] inline static DynamicValue    object() { return DynamicValue{DynamicObject{}}; }
-    [[nodiscard]] constexpr static DynamicValue array() { return DynamicValue{DynamicArray{}}; }
+    [[nodiscard]] LL_FORCEINLINE static DynamicValue object() noexcept { return DynamicValue{DynamicObject{}}; }
+    [[nodiscard]] constexpr static DynamicValue array() noexcept { return DynamicValue{DynamicArray{}}; }
 
     template <IsAnyDynamicElement T>
-    [[nodiscard]] constexpr bool hold() const noexcept {
+    [[nodiscard]] LL_FORCEINLINE constexpr bool hold() const noexcept {
         if constexpr (ll::concepts::IsOneOf<T, AllElementTypes>) {
             return hold<DynamicElement>() && std::holds_alternative<T>(std::get<DynamicElement>(*this));
         } else {
@@ -90,7 +90,7 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
         }
     }
     template <IsAnyDynamicElement T>
-    [[nodiscard]] constexpr T const& get() const& {
+    [[nodiscard]] LL_FORCEINLINE constexpr T const& get() const& {
         if constexpr (ll::concepts::IsOneOf<T, AllElementTypes>) {
             return std::get<T>(std::get<DynamicElement>(*this));
         } else {
@@ -98,7 +98,7 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
         }
     }
     template <IsAnyDynamicElement T>
-    [[nodiscard]] constexpr T& get() & {
+    [[nodiscard]] LL_FORCEINLINE constexpr T& get() & {
         if constexpr (ll::concepts::IsOneOf<T, AllElementTypes>) {
             return std::get<T>(std::get<DynamicElement>(*this));
         } else {
@@ -106,7 +106,7 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
         }
     }
     template <IsAnyDynamicElement T>
-    [[nodiscard]] constexpr T&& get() && {
+    [[nodiscard]] LL_FORCEINLINE constexpr T&& get() && {
         if constexpr (ll::concepts::IsOneOf<T, AllElementTypes>) {
             return std::get<T>(std::get<DynamicElement>(std::move(*this)));
         } else {
@@ -122,9 +122,12 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
                 return {};
             };
         }
-        if (!hold<T>()) return error_utils::makeFromDynamicTypeError<T, T>(*this);
-        out = get<T>();
-        return {};
+        if (!hold<T>()) {
+            return fromDynamic(*this, out);
+        } else {
+            out = get<T>();
+            return {};
+        }
     }
     template <concepts::SupportFromDynamicC T>
         requires(!IsAnyDynamicElement<T>)
