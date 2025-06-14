@@ -91,8 +91,10 @@ ll::Expected<FunctionRef> exportFunc(
 
 ll::Expected<FunctionRef> importFunc(std::string_view nameSpace, std::string_view funcName, bool includeDisabled) {
     auto iter = exportedFuncs.find(std::pair{nameSpace, funcName});
-    if (iter == exportedFuncs.end()) return error_utils::makeNotFoundError(nameSpace, funcName);
-    if (!includeDisabled && iter->second.disabled) return error_utils::makeDisabledError(nameSpace, funcName);
+    if (iter == exportedFuncs.end()) [[unlikely]]
+        return error_utils::makeNotFoundError(nameSpace, funcName);
+    if (!includeDisabled && iter->second.disabled) [[unlikely]]
+        return error_utils::makeDisabledError(nameSpace, funcName);
     return iter->second;
 }
 

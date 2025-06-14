@@ -51,25 +51,14 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
         requires(requires(T&& v) { DynamicElement(std::forward<T>(v)); })
     constexpr DynamicValue(T&& v) noexcept(std::is_nothrow_constructible_v<DynamicElement, T&&>)
     : BaseType(DynamicElement(std::forward<T>(v))){};
-    template <concepts::SupportToDynamic T>
-        requires(!requires(T&& v) {
-            DynamicElement(std::forward<T>(v));
-        } && !std::same_as<T, DynamicValue> && !IsAnyDynamicElement<T>)
-    LL_CONSTEXPR23 DynamicValue(T&& v) : BaseType() {
-        ::remote_call::toDynamic(*this, std::forward<T>(v)).value();
-    };
-    // template <concepts::SupportFromDynamic T>
-    // [[nodiscard]] constexpr operator T() & {
-    //     T v;
-    //     ::remote_call::fromDynamic(*this, v);
-    //     return std::forward<T>(v);
-    // }
-    // template <concepts::SupportFromDynamic T>
-    // [[nodiscard]] constexpr operator T() && {
-    //     T v;
-    //     ::remote_call::fromDynamic(*this, v);
-    //     return std::forward<T>(v);
-    // }
+
+    // template <concepts::SupportToDynamic T>
+    //     requires(!requires(T&& v) {
+    //         DynamicElement(std::forward<T>(v));
+    //     } && !std::same_as<T, DynamicValue> && !IsAnyDynamicElement<T>)
+    // LL_CONSTEXPR23 DynamicValue(T&& v) : BaseType() {
+    //     ::remote_call::toDynamic(*this, std::forward<T>(v)).value();
+    // };
 
     template <ll::concepts::IsOneOf<AllElementTypes> T, class... Args>
     LL_FORCEINLINE constexpr T& emplace(Args&&... val) noexcept(std::is_nothrow_constructible_v<T, Args&&...>) {
@@ -124,11 +113,15 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
                 return {};
             };
         }
-        if (!hold<T>()) {
-            return fromDynamic(*this, out);
-        } else {
+        if (hold<T>()) [[likely]] {
             out = get<T>();
             return {};
+        } else {
+            if constexpr (concepts::SupportFromDynamicC<T>) {
+                return fromDynamic(*this, std::in_place_type<T>).and_then([&](auto&& v) { out = std::move(v); });
+            } else {
+                return fromDynamic(*this, out);
+            }
         }
     }
     template <concepts::SupportFromDynamicC T>
@@ -174,28 +167,33 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
 
     template <concepts::SupportFromDynamicC T>
     [[nodiscard]] constexpr std::optional<T> tryGet(ll::Expected<>& success) {
-        auto result = tryGet<T>();
-        if (result) return *std::move(result);
-        success = ll::forwardError(result.error());
+        if (success) [[likely]] {
+            auto result = tryGet<T>();
+            if (result) [[likely]]
+                return *std::move(result);
+            success = ll::forwardError(result.error());
+        }
         return {};
     }
     template <concepts::SupportFromDynamicR T>
         requires(!concepts::SupportFromDynamicC<T>)
     [[nodiscard]] constexpr std::optional<T> tryGet(ll::Expected<>& success) {
-        if (success) {
+        if (success) [[likely]] {
             T v{};
             success = getTo(v);
-            if (success) return v;
+            if (success) [[likely]]
+                return v;
         }
         return {};
     }
     template <typename T>
         requires(std::is_lvalue_reference_v<T> && concepts::SupportFromDynamic<traits::reference_to_pointer_t<T>>)
     [[nodiscard]] constexpr optional_ref<std::remove_reference_t<T>> tryGet(ll::Expected<>& success) {
-        if (success) {
+        if (success) [[likely]] {
             traits::reference_to_pointer_t<T> ptr{};
             success = getTo(ptr);
-            if (success) return ptr;
+            if (success) [[likely]]
+                return ptr;
         }
         return {};
     }
@@ -219,28 +217,30 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
     [[nodiscard]] constexpr bool is_structured() const noexcept { return is_array() || is_object(); }
 
     [[nodiscard]] constexpr size_t size() const noexcept {
+        if (is_array()) [[likely]]
+            return get<DynamicArray>().size();
+        if (is_object()) return get<DynamicObject>().size();
         if (hold<DynamicElement>()) {
             if (is_null()) return 0;
             return 1;
         }
-        if (is_object()) return get<DynamicObject>().size();
-        if (is_array()) return get<DynamicArray>().size();
         return 0;
     }
     // Object
     [[nodiscard]] constexpr bool contains(std::string const& key) const noexcept {
-        if (!hold<DynamicObject>()) return false;
+        if (!hold<DynamicObject>()) [[unlikely]]
+            return false;
         return get<DynamicObject>().contains(key);
     }
     [[nodiscard]] inline DynamicValue const& operator[](std::string const& index) const {
-        if (!hold<DynamicObject>()) {
+        if (!hold<DynamicObject>()) [[unlikely]] {
             throw std::runtime_error("value not hold an object");
         }
         return get<DynamicObject>().at(index);
     }
     [[nodiscard]] constexpr DynamicValue& operator[](std::string const& index) {
         if (!hold<DynamicObject>()) {
-            if (hold<NullType>()) {
+            if (hold<NullType>()) [[likely]] {
                 return emplace<DynamicObject>()[index];
             }
             throw std::runtime_error("value not hold an object");
@@ -254,26 +254,26 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
         return (*this)[std::string_view{index, N - 1}];
     }
     [[nodiscard]] constexpr auto const& items() const {
-        if (!hold<DynamicObject>()) {
+        if (!hold<DynamicObject>()) [[unlikely]] {
             throw std::runtime_error("value not hold an object");
         }
         return get<DynamicObject>();
     }
     [[nodiscard]] constexpr auto& items() {
-        if (!hold<DynamicObject>()) {
+        if (!hold<DynamicObject>()) [[unlikely]] {
             throw std::runtime_error("value not hold an object");
         }
         return get<DynamicObject>();
     }
     // Array
     [[nodiscard]] constexpr DynamicValue const& operator[](size_t index) const {
-        if (!is_array()) {
+        if (!is_array()) [[unlikely]] {
             throw std::runtime_error("value not hold an array");
         }
         return get<DynamicArray>().at(index);
     }
     [[nodiscard]] constexpr DynamicValue& operator[](size_t index) {
-        if (!is_array()) {
+        if (!is_array()) [[unlikely]] {
             throw std::runtime_error("value not hold an array");
         }
         return get<DynamicArray>()[index];
@@ -282,7 +282,8 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
         requires(requires(Args... args) { DynamicValue(std::forward<Args>(args)...); })
     constexpr DynamicValue& emplace_back(Args... args) {
         if (!is_array()) {
-            if (is_null()) return emplace<DynamicArray>().emplace_back(args...);
+            if (is_null()) [[likely]]
+                return emplace<DynamicArray>().emplace_back(args...);
             throw std::runtime_error("");
         }
         return get<DynamicArray>().emplace_back(args...);

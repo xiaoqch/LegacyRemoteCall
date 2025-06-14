@@ -1,9 +1,11 @@
 
 #include "Test.h"
+#include "ll/api/base/Containers.h"
 #include "ll/api/chrono/GameChrono.h"
 #include "ll/api/coro/CoroTask.h"
 #include "ll/api/io/LogLevel.h"
 #include "ll/api/memory/Memory.h"
+#include "ll/api/mod/ModManagerRegistry.h"
 #include "ll/api/reflection/Serialization.h"
 #include "ll/api/thread/ServerThreadExecutor.h"
 #include "ll/api/utils/RandomUtils.h"
@@ -82,10 +84,10 @@ struct JsonA {
     double   d{};
     EnumType e{};
     // remote_call::NullType                null{};
-    std::string                               str;
-    std::vector<std::string>                  list;
-    std::unordered_map<std::string, int>      record;
-    std::unordered_map<ll::io::LogLevel, int> record2{};
+    std::string                              str;
+    std::vector<std::string>                 list;
+    std::unordered_map<std::string, int>     record;
+    ll::SmallDenseMap<ll::io::LogLevel, int> record2{};
 
     bool         operator==(JsonA const& o) const = default;
     static JsonA random();
@@ -100,10 +102,10 @@ struct JsonB {
     double   d{};
     EnumType e{};
     // remote_call::NullType                null{};
-    std::string                               str;
-    std::vector<std::string>                  list;
-    std::unordered_map<std::string, int>      record;
-    std::unordered_map<ll::io::LogLevel, int> record2{};
+    std::string                              str;
+    std::vector<std::string>                 list;
+    std::unordered_map<std::string, int>     record;
+    ll::SmallDenseMap<ll::io::LogLevel, int> record2{};
 
     JsonA                         obj;
     std::vector<JsonA>            vec;
@@ -124,7 +126,7 @@ ll::coro::CoroTask<bool> testJsonType() {
     assert(ori == res);
     auto json = ll::reflection::serialize<nlohmann::ordered_json>(res).value().dump();
 
-    remote_call::exportAs(ns, "forwardJsonType", [&ori](JsonB const& jsonB) {
+    remote_call::exportAs(ns, "forwardJsonType", [&](JsonB const& jsonB) {
         assert(jsonB == ori);
         return jsonB;
     });
@@ -134,14 +136,17 @@ ll::coro::CoroTask<bool> testJsonType() {
     assert(res == forwarded);
     assert(reflection::isEqual(res, forwarded));
 
-    auto deadline = ll::chrono::GameTickClock::now() + ll::chrono::ticks{100};
-    while (!remote_call::hasFunc(ns, "lseCompareJson")) {
-        if (ll::chrono::GameTickClock::now() > deadline) break;
-        co_await ll::chrono::ticks{5};
-    }
-    if (remote_call::hasFunc(ns, "lseCompareJson")) {
+    co_await ll::chrono::ticks{1};
+    if (ll::mod::ModManagerRegistry::getInstance().hasMod(LSE_TEST_MODE_NAME)) {
+        auto deadline = ll::chrono::GameTickClock::now() + ll::chrono::ticks{100};
+        while (!remote_call::hasFunc(ns, "lseCompareJson")) {
+            if (ll::chrono::GameTickClock::now() > deadline) break;
+            co_await ll::chrono::ticks{5};
+        }
         auto const lseCompareJson = remote_call::importAs<bool(JsonB, std::string&&)>(ns, "lseCompareJson");
         lseCompareJson(ori, std::move(json)).value();
+    } else {
+        getLogger().warn("Test for LSE not start, mod <{}> not exists", LSE_TEST_MODE_NAME);
     }
     co_return true;
 }

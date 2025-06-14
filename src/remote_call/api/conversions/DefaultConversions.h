@@ -35,12 +35,12 @@ toDynamic(DynamicValue& dv, T&& t, priority::HightTag) noexcept(std::is_nothrow_
 }
 template <concepts::IsNormalElement T>
 inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
-    if (dv.hold<T>()) {
+    if (dv.hold<T>()) [[likely]] {
         t = dv.get<T>();
         return {};
     }
     if constexpr (std::is_pointer_v<T>) {
-        if (dv.hold<NullType>()) {
+        if (dv.hold<NullType>()) [[likely]] {
             t = T{};
             return {};
         }
@@ -58,7 +58,7 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::LowTag) noexc
 template <concepts::IsString T>
     requires(!concepts::IsValueElement<T>)
 inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::LowTag) {
-    if (dv.hold<std::string>()) {
+    if (dv.hold<std::string>()) [[likely]] {
         t = std::forward<DynamicValue>(dv).get<std::string>();
         return {};
     } else {
@@ -87,7 +87,7 @@ public:
     };
     template <typename T = NativeType>
     inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t) const {
-        if (!dv.hold<DynType>()) {
+        if (!dv.hold<DynType>()) [[unlikely]] {
             return error_utils::makeFromDynamicTypeError<T, DynType>(dv);
         }
         t = dv.get<DynType>().template get<T>();
@@ -132,7 +132,7 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::DefaultTag) n
 template <std::convertible_to<Player const*> T>
     requires(!concepts::IsValueElement<T> && !std::convertible_to<T, SimulatedPlayer const*>)
 inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::DefaultTag) {
-    if (!dv.hold<Player*>()) {
+    if (!dv.hold<Player*>()) [[unlikely]] {
         return error_utils::makeFromDynamicTypeError<T, Player*>(dv);
     }
     t = reinterpret_cast<T>(dv.get<Player*>());
@@ -149,7 +149,7 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::DefaultTag) 
     } else if (dv.hold<Actor*>()) {
         t = dv.get<Actor*>();
         return {};
-    } else {
+    } else [[unlikely]] {
         return error_utils::makeFromDynamicTypeError<T, Actor*, Player*>(dv);
     }
 }
@@ -170,7 +170,7 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
     } else if (dv.hold<WorldPosType>()) {
         t = dv.get<WorldPosType>().get<T>();
         return {};
-    } else {
+    } else [[unlikely]] {
         return error_utils::makeFromDynamicTypeError<T, BlockPosType, WorldPosType>(dv);
     }
 }
@@ -200,14 +200,14 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, Pos& t, priority::DefaultTag
         std::get<0>(t) = val.get<PosType>();
         std::get<1>(t) = static_cast<DimType>(val.dimId);
         return {};
-    }
-    if (dv.hold<WorldPosType>()) {
+    } else if (dv.hold<WorldPosType>()) {
         auto& val      = dv.get<WorldPosType>();
         std::get<0>(t) = val.get<PosType>();
         std::get<1>(t) = static_cast<DimType>(val.dimId);
         return {};
+    } else [[unlikely]] {
+        return error_utils::makeFromDynamicTypeError<Pos, BlockPosType, WorldPosType>(dv);
     }
-    return error_utils::makeFromDynamicTypeError<Pos, BlockPosType, WorldPosType>(dv);
 }
 
 // T& -> T* -> remote_call::DynamicValue
@@ -260,7 +260,7 @@ inline ll::Expected<> toDynamicEnumName(DynamicValue& dv, T&& e, ll::meta::Prior
     } else {
         name = magic_enum::enum_name<EnumType>(e);
     }
-    if (name.empty()) {
+    if (name.empty()) [[unlikely]] {
         return error_utils::makeUnsupportedValueError<T, std::string>(
             std::to_string(static_cast<std::underlying_type_t<EnumType>>(e)),
             "can not get enum name"
@@ -286,7 +286,8 @@ inline ll::Expected<> fromDynamicEnumName(std::string& dv, T& e) {
     } else {
         res = magic_enum::enum_cast<EnumType>(dv);
     }
-    if (!res) return error_utils::makeUnsupportedValueError<std::string, T>(dv, "can not cast to enum");
+    if (!res) [[unlikely]]
+        return error_utils::makeUnsupportedValueError<std::string, T>(dv, "can not cast to enum");
     e = *res;
     return {};
 }
@@ -301,7 +302,7 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& e, priority::LowTag) {
     }
     if (dv.is_number()) {
         e = static_cast<EnumType>(dv.get<NumberType>().get<std::underlying_type_t<EnumType>>());
-    } else {
+    } else [[unlikely]] {
         return error_utils::makeFromDynamicTypeError<T, std::string, NumberType>(dv);
     }
     return {};

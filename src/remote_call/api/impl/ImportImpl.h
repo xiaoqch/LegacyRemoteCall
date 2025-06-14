@@ -34,7 +34,7 @@ importCallImpl(std::string const& nameSpace, std::string const& funcName, Args&&
     using RealRet     = corrected_return<Ret>::Real;
 
     auto res = importFunc(nameSpace, funcName);
-    if (!res) {
+    if (!res) [[unlikely]] {
         return ll::forwardError(res.error());
     }
     auto const&  rawFunc = *res;
@@ -43,10 +43,12 @@ importCallImpl(std::string const& nameSpace, std::string const& funcName, Args&&
     auto paramTuple = std::forward_as_tuple(std::forward<Args>(args)...);
 
     ll::Expected<> success = toDynamic(params, std::forward<decltype(paramTuple)>(paramTuple));
-    if (!success) return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "args", success.error());
+    if (!success) [[unlikely]]
+        return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "args", success.error());
 
     auto dynRet = rawFunc(std::move(params).get<DynamicArray>());
-    if (!dynRet) return error_utils::makeCallError<Ret, Args...>(nameSpace, funcName, dynRet.error());
+    if (!dynRet) [[unlikely]]
+        return error_utils::makeCallError<Ret, Args...>(nameSpace, funcName, dynRet.error());
 
     return dynRet->tryGet<RealRet>().or_else([&nameSpace, &funcName](auto&& err) -> ExpectedRet {
         return error_utils::makeDeserializeError<Ret, Args...>(nameSpace, funcName, "ret", err);

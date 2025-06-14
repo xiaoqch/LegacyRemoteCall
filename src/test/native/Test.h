@@ -7,7 +7,8 @@
 
 namespace remote_call::test {
 
-constexpr std::string TEST_EXPORT_NAMESPACE = "RemoteCallTest";
+inline constexpr std::string      TEST_EXPORT_NAMESPACE = "RemoteCallTest";
+inline constexpr std::string_view LSE_TEST_MODE_NAME    = "lse-remote-call-test";
 // constexpr auto SUCCESS_PREFIX =fmt::styled("",fmt::fg(fmt::terminal_color::green));
 inline auto& getLogger() {
     static auto logger = [] {

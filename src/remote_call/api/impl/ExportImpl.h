@@ -18,52 +18,19 @@ inline constexpr bool ALWAYS_RETURN_EXPECTED = false;
 // real for get by DynamicValue
 template <typename T>
 struct corrected_arg {
-    using hold_type                          = std::decay_t<T>;
-    using real                               = std::decay_t<T>;
-    static inline constexpr bool add_pointer = false;
+    using hold_type                           = std::decay_t<T>;
+    using real                                = std::decay_t<T>;
+    static inline constexpr bool ref_from_ptr = false;
 };
 
 // Player& -> Player*, CompoundTag& -> CompoundTag*...
 template <typename T>
     requires(std::is_lvalue_reference_v<T> && concepts::SupportFromDynamic<std::add_pointer_t<std::remove_cvref_t<T>>>)
 struct corrected_arg<T> {
-    using hold_type                          = std::reference_wrapper<std::decay_t<T>>;
-    using real                               = std::add_pointer_t<std::decay_t<T>>;
-    static inline constexpr bool add_pointer = true;
+    using hold_type                           = traits::reference_to_wrapper_t<T>;
+    using real                                = std::add_pointer_t<std::decay_t<T>>;
+    static inline constexpr bool ref_from_ptr = true;
 };
-
-
-template <typename T, size_t I = 0>
-    requires(corrected_arg<T>::add_pointer)
-[[nodiscard]] constexpr corrected_arg<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& success) {
-    typename corrected_arg<T>::real p{}; // Player*
-    if (success) {
-        success = dv.getTo(p);
-        if (!success) success = error_utils::makeSerIndexError(I, success.error());
-    }
-    return std::ref(*p); // std::reference_wrapper<Player>
-}
-template <typename T, size_t I = 0>
-    requires(!corrected_arg<T>::add_pointer)
-[[nodiscard]] constexpr corrected_arg<T>::hold_type unpack(DynamicValue& dv, ll::Expected<>& success) {
-    typename corrected_arg<T>::real p{};
-    if (success) {
-        success = dv.getTo(p);
-        if (!success) success = error_utils::makeSerIndexError(I, success.error());
-    }
-    return p;
-}
-
-template <typename T, size_t I = 0, size_t Req = I, typename Def = std::tuple<>>
-[[nodiscard]] LL_FORCEINLINE constexpr corrected_arg<T>::hold_type
-unpackWithDefault(std::vector<DynamicValue>& dv, ll::Expected<>& success, Def const& defaultArgs) {
-    if constexpr (I >= Req) {
-        if (success && (I >= dv.size() || dv[I].is_null())) {
-            return std::get<I - Req>(defaultArgs);
-        }
-    }
-    return unpack<T>(dv[I], success);
-}
 
 template <size_t Max, typename... Args>
 consteval size_t getNonOptionalArgsCount() {
@@ -107,6 +74,49 @@ consteval size_t getRequiredArgsCount(std::in_place_type_t<Fn>)
     return required;
 }
 
+
+template <typename Tpl, size_t... I, typename... DefaultArgs>
+ll::Expected<Tpl> fromDynamicTupleWithDefaultImpl(
+    DynamicArray& da,
+    std::index_sequence<I...>,
+    std::tuple<DefaultArgs...> const& defArgs = {}
+) {
+    ll::Expected<> res;
+    auto           getElement = [&]<size_t Idx, typename Element>(DynamicArray& da, ll::Expected<>& res)
+        -> decltype(da[Idx].tryGet<Element>(res)) {
+        if constexpr (!requires() { da[Idx].tryGet<Element>(res); }) {
+            __debugbreak();
+            static_assert(ll::traits::always_false<Element>, "this type can't deserialize");
+        }
+        if (!res) [[unlikely]]
+            return std::nullopt;
+        if (Idx < da.size() && !da[Idx].hold<NullType>()) {
+            auto opt = da[Idx].tryGet<Element>(res);
+            if (!res) [[unlikely]]
+                res = error_utils::makeSerIndexError(Idx, res.error());
+            return opt;
+        } else {
+            constexpr size_t Req = sizeof...(I) - sizeof...(DefaultArgs);
+            if constexpr (Idx >= Req) {
+                return std::get<Idx - Req>(defArgs);
+            } else if constexpr (ll::concepts::IsOptional<Element>) {
+                return std::make_optional<Element>(std::nullopt);
+            } else {
+                res = error_utils::makeError(
+                    error_utils::ErrorReason::IndexOutOfRange,
+                    fmt::format("index \"{}\" outof range", Idx)
+                );
+                res = error_utils::makeSerIndexError(Idx, res.error());
+                return std::nullopt;
+            }
+        }
+    };
+    auto tmp = std::make_tuple(getElement.template operator()<I, std::tuple_element_t<I, Tpl>>(da, res)...);
+    if (res) [[likely]]
+        return Tpl{*std::get<I>(std::move(tmp))...};
+    return ll::forwardError(res.error());
+}
+
 template <typename Fn, typename Ret, typename... Args, typename... DefaultArgs>
 [[nodiscard]] inline ll::Expected<DynamicValue> exportCallImpl(
     std::in_place_type_t<Ret(Args...)>,
@@ -117,28 +127,23 @@ template <typename Fn, typename Ret, typename... Args, typename... DefaultArgs>
     [[maybe_unused]] std::tuple<DefaultArgs...> const& defArgs = {}
 ) {
     using ArgsHoldingTuple = std::tuple<typename corrected_arg<Args>::hold_type...>;
-    ll::Expected<>   success{};
-    ArgsHoldingTuple paramsHolder = [&]<size_t... I>(std::index_sequence<I...>) {
-        if constexpr (sizeof...(DefaultArgs) > 0) {
-            return std::make_tuple(
-                unpackWithDefault<Args, I, sizeof...(Args) - sizeof...(DefaultArgs)>(args, success, defArgs)...
-            );
-        } else {
-            return std::make_tuple(unpack<Args, I>(args[I], success)...);
-        }
-    }(std::index_sequence_for<Args...>{});
-    if (!success) return error_utils::makeDeserializeError<Ret, Args...>(nameSpace, funcName, "args", success.error());
+    ll::Expected<ArgsHoldingTuple> paramsHolder =
+        fromDynamicTupleWithDefaultImpl<ArgsHoldingTuple>(args, std::index_sequence_for<Args...>{}, defArgs);
 
-    // std::tuple<Args&&...> paramsRef = [&]<size_t... I>(std::index_sequence<I...>) {
-    //     return std::forward_as_tuple(static_cast<Args&&>(std::get<I>(paramsHolder))...);
-    // }(std::index_sequence_for<Args...>{});
+    if (!paramsHolder) [[unlikely]]
+        return error_utils::makeDeserializeError<Ret, Args...>(nameSpace, funcName, "args", paramsHolder.error());
+
+    // For support T& param
+    std::tuple<Args&&...> paramsRef = []<size_t... I>(std::index_sequence<I...>, auto&& params) {
+        return std::forward_as_tuple(static_cast<Args&&>(std::get<I>(params))...);
+    }(std::index_sequence_for<Args...>{}, *paramsHolder);
 
     if constexpr (std::is_void_v<Ret>) {
-        std::apply(callback, std::forward<decltype(paramsHolder)>(paramsHolder));
+        std::apply(callback, std::forward<decltype(paramsRef)>(paramsRef));
         return {};
     } else if constexpr (concepts::IsLeviExpected<Ret>) {
-        auto exceptedRet = std::apply(callback, std::forward<decltype(paramsHolder)>(paramsHolder));
-        if (!exceptedRet) {
+        auto exceptedRet = std::apply(callback, std::forward<decltype(paramsRef)>(paramsRef));
+        if (!exceptedRet) [[unlikely]] {
             return error_utils::makeCallError<Ret, Args...>(nameSpace, funcName, exceptedRet.error());
         }
         return DynamicValue::from(*exceptedRet)
@@ -146,7 +151,7 @@ template <typename Fn, typename Ret, typename... Args, typename... DefaultArgs>
                 return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "ret", err);
             });
     } else {
-        Ret nativeRet = std::apply(callback, std::forward<decltype(paramsHolder)>(paramsHolder));
+        Ret nativeRet = std::apply(callback, std::forward<decltype(paramsRef)>(paramsRef));
         return DynamicValue::from(std::forward<Ret>(nativeRet))
             .or_else([&nameSpace, &funcName](auto&& err) -> ll::Expected<DynamicValue> {
                 return error_utils::makeSerializeError<Ret, Args...>(nameSpace, funcName, "ret", err);
@@ -232,7 +237,7 @@ template <typename Fn, typename Ret, typename... Args, typename... DefaultArgs>
         constexpr size_t RequiredArgsCount    = ArgsCount - DefaultArgsCount;
         constexpr size_t NonOptionalArgsCount = getNonOptionalArgsCount<RequiredArgsCount, Args...>();
 
-        if (!normalizeArgs<ArgsCount, RequiredArgsCount, NonOptionalArgsCount>(args)) {
+        if (!normalizeArgs<ArgsCount, RequiredArgsCount, NonOptionalArgsCount>(args)) [[unlikely]] {
             return error_utils::makeArgsCountError<Ret, Args...>(nameSpace, funcName, args.size());
         }
         return exportCallImpl(
@@ -265,7 +270,7 @@ template <typename Fn, typename Ret, typename... Args>
         constexpr size_t                  NonOptionalArgsCount = getNonOptionalArgsCount<RequiredArgsCount, Args...>();
         [[maybe_unused]] constexpr size_t DefaultArgsCount     = ArgsCount - RequiredArgsCount;
 
-        if (!normalizeArgs<ArgsCount, RequiredArgsCount, NonOptionalArgsCount>(args)) {
+        if (!normalizeArgs<ArgsCount, RequiredArgsCount, NonOptionalArgsCount>(args)) [[unlikely]] {
             return error_utils::makeArgsCountError<Ret, Args...>(nameSpace, funcName, args.size());
         }
         return exportExCallImpl<ArgsCount, RequiredArgsCount>(
