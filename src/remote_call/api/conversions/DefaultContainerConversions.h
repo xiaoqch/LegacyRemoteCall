@@ -19,7 +19,9 @@ namespace remote_call::detail {
 // std::optional<T>
 template <typename T>
     requires(ll::concepts::IsOptional<std::remove_cvref_t<T>> && concepts::SupportToDynamic<typename std::remove_cvref_t<T>::value_type>)
-inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::HightTag) {
+inline ll::Expected<> toDynamic(DynamicValue& dv, T&& t, priority::HightTag) noexcept(
+    noexcept(::remote_call::toDynamic(dv, *std::forward<T>(t)))
+) {
     if (t.has_value()) return ::remote_call::toDynamic(dv, *std::forward<T>(t));
     dv.emplace<NullType>(NULL_VALUE);
     return {};

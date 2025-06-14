@@ -22,7 +22,7 @@ struct MayUniquePtr {
     bool     own = false;
 
     constexpr MayUniquePtr(const MayUniquePtr&) = delete;
-    constexpr MayUniquePtr(MayUniquePtr&& o) : ptr(o.ptr), own(o.own) { o.own = false; };
+    constexpr MayUniquePtr(MayUniquePtr&& o) noexcept : ptr(o.ptr), own(o.own) { o.own = false; };
     constexpr MayUniquePtr& operator=(const MayUniquePtr&) = delete;
     constexpr MayUniquePtr& operator=(MayUniquePtr&& o) {
         if (own && ptr) delete ptr;
@@ -31,15 +31,15 @@ struct MayUniquePtr {
         o.own = false;
         return *this;
     };
-    constexpr MayUniquePtr(std::unique_ptr<T>&& tag) : ptr(tag.release()), own(true) {};
-    constexpr MayUniquePtr(std::unique_ptr<T> const& tag) : ptr(tag.get()), own(false) {};
-    constexpr MayUniquePtr(T const* ptr) : ptr(ptr), own(false) {};
+    constexpr MayUniquePtr(std::unique_ptr<T>&& tag) noexcept : ptr(tag.release()), own(true) {};
+    constexpr MayUniquePtr(std::unique_ptr<T> const& tag) noexcept : ptr(tag.get()), own(false) {};
+    constexpr MayUniquePtr(T const* ptr) noexcept : ptr(ptr), own(false) {};
     constexpr ~MayUniquePtr() {
         if (own && ptr) delete ptr;
         own = false;
         ptr = nullptr;
     }
-    [[nodiscard]] constexpr std::unique_ptr<T> tryGetUniquePtr() {
+    [[nodiscard]] constexpr std::unique_ptr<T> tryGetUniquePtr() noexcept(std::is_nothrow_constructible_v<T, T&>) {
         if (!own) {
             if (!ptr) return {};
             return std::make_unique<T>(*ptr); // clone
@@ -50,15 +50,15 @@ struct MayUniquePtr {
     template <typename RTN = T const*>
     [[nodiscard]] constexpr RTN get() = delete;
     template <>
-    [[nodiscard]] constexpr T const* get() {
+    [[nodiscard]] constexpr T const* get() noexcept {
         return ptr;
     };
     template <>
-    [[nodiscard]] constexpr T* get() {
+    [[nodiscard]] constexpr T* get() noexcept {
         return const_cast<T*>(ptr);
     };
     template <>
-    [[nodiscard]] constexpr std::unique_ptr<T> get() {
+    [[nodiscard]] constexpr std::unique_ptr<T> get() noexcept(noexcept(tryGetUniquePtr())) {
         return tryGetUniquePtr();
     };
 };
@@ -71,11 +71,11 @@ struct BlockType {
     BlockPos     blockPos{};
     int          dimension = 0;
 
-    constexpr BlockType(Block const* ptr) : block(ptr) {};
+    constexpr BlockType(Block const* ptr) noexcept : block(ptr) {};
     template <typename RTN>
-    [[nodiscard]] constexpr RTN get() = delete;
+    [[nodiscard]] constexpr RTN get() const = delete;
     template <>
-    [[nodiscard]] constexpr Block const* get() {
+    [[nodiscard]] constexpr Block const* get() const noexcept {
         return block;
     };
 };
@@ -84,32 +84,28 @@ struct NumberType {
     __int64 i = 0;
     double  f = 0;
 
-    constexpr NumberType(__int64 i, double f) : i(i), f(f) {};
+    constexpr NumberType(__int64 i, double f) noexcept : i(i), f(f) {};
+
     template <typename T>
         requires(std::is_integral_v<T> || std::is_floating_point_v<T>)
-    constexpr NumberType& operator=(T v) {
+    constexpr NumberType(T v) noexcept : i(static_cast<__int64>(v)),
+                                         f(static_cast<double>(v)) {}
+
+    template <typename T>
+        requires(std::is_integral_v<T> || std::is_floating_point_v<T>)
+    constexpr NumberType& operator=(T v) noexcept {
         i = static_cast<__int64>(v);
         f = static_cast<double>(v);
         return *this;
     }
-    constexpr NumberType(double v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    constexpr NumberType(float v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    constexpr NumberType(__int64 v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    constexpr NumberType(int v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    constexpr NumberType(short v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    constexpr NumberType(char v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    constexpr NumberType(unsigned __int64 v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    constexpr NumberType(unsigned int v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    constexpr NumberType(unsigned short v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
-    constexpr NumberType(unsigned char v) : i(static_cast<__int64>(v)), f(static_cast<double>(v)) {};
     template <typename RTN>
         requires(std::is_integral_v<RTN> && !ll::traits::is_char_v<RTN>)
-    [[nodiscard]] constexpr RTN get() const {
+    [[nodiscard]] constexpr RTN get() const noexcept {
         return static_cast<RTN>(i);
     };
     template <typename RTN>
         requires(std::is_floating_point_v<RTN>)
-    [[nodiscard]] constexpr RTN get() const {
+    [[nodiscard]] constexpr RTN get() const noexcept {
         return static_cast<RTN>(f);
     };
 };
@@ -118,16 +114,16 @@ struct WorldPosType {
     Vec3 pos{};
     int  dimId = 3; // VanillaDimensions::Undefined;
 
-    constexpr WorldPosType(Vec3 const& pos, int dimId = 3) : pos(pos), dimId(dimId) {};
-    constexpr WorldPosType(std::pair<Vec3, int> const& pos) : pos(pos.first), dimId(pos.second) {};
+    constexpr WorldPosType(Vec3 const& pos, int dimId = 3) noexcept : pos(pos), dimId(dimId) {};
+    constexpr WorldPosType(std::pair<Vec3, int> const& pos) noexcept : pos(pos.first), dimId(pos.second) {};
     template <typename RTN>
-    [[nodiscard]] constexpr RTN get() = delete;
+    [[nodiscard]] constexpr RTN get() const noexcept = delete;
     template <>
-    [[nodiscard]] constexpr Vec3 get() {
+    [[nodiscard]] constexpr Vec3 get() const noexcept {
         return pos;
     };
     template <>
-    [[nodiscard]] constexpr BlockPos get() {
+    [[nodiscard]] constexpr BlockPos get() const noexcept {
         BlockPos res{};
         res.x = static_cast<int>(this->pos.x);
         res.y = static_cast<int>(this->pos.y);
@@ -135,11 +131,11 @@ struct WorldPosType {
         return res;
     };
     template <>
-    [[nodiscard]] constexpr std::pair<Vec3, int> get() {
+    [[nodiscard]] constexpr std::pair<Vec3, int> get() const noexcept {
         return std::make_pair(pos, dimId);
     };
     template <>
-    [[nodiscard]] constexpr std::pair<BlockPos, int> get() {
+    [[nodiscard]] constexpr std::pair<BlockPos, int> get() const noexcept {
         return std::make_pair(get<BlockPos>(), dimId);
     };
 };
@@ -148,24 +144,24 @@ struct BlockPosType {
     BlockPos pos{};
     int      dimId = 3; // VanillaDimensions::Undefined;
 
-    constexpr BlockPosType(BlockPos const& pos, int dimId = 0) : pos(pos), dimId(dimId) {};
-    constexpr BlockPosType(std::pair<BlockPos, int> const& pos) : pos(pos.first), dimId(pos.second) {};
+    constexpr BlockPosType(BlockPos const& pos, int dimId = 0) noexcept : pos(pos), dimId(dimId) {};
+    constexpr BlockPosType(std::pair<BlockPos, int> const& pos) noexcept : pos(pos.first), dimId(pos.second) {};
     template <typename RTN>
-    [[nodiscard]] constexpr RTN get() = delete;
+    [[nodiscard]] constexpr RTN get() const noexcept = delete;
     template <>
-    [[nodiscard]] constexpr BlockPos get() {
+    [[nodiscard]] constexpr BlockPos get() const noexcept {
         return pos;
     };
     template <>
-    [[nodiscard]] constexpr std::pair<BlockPos, int> get() {
+    [[nodiscard]] constexpr std::pair<BlockPos, int> get() const noexcept {
         return std::make_pair(pos, dimId);
     };
     template <>
-    [[nodiscard]] constexpr Vec3 get() {
+    [[nodiscard]] constexpr Vec3 get() const noexcept {
         return {static_cast<float>(this->pos.x), static_cast<float>(this->pos.y), static_cast<float>(this->pos.y)};
     };
     template <>
-    [[nodiscard]] constexpr std::pair<Vec3, int> get() {
+    [[nodiscard]] constexpr std::pair<Vec3, int> get() const noexcept {
         return std::make_pair(get<Vec3>(), dimId);
     };
 };

@@ -32,23 +32,25 @@ concept IsAnyDynamicElement = ll::concepts::IsOneOf<T, AllElementTypes, DynamicE
 struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
     using BaseType = detail::DynamicBase<DynamicVariant>;
 
-    constexpr DynamicValue() : BaseType(DynamicElement{NULL_VALUE}) {};
-    constexpr DynamicValue(const DynamicValue&)            = delete;
-    constexpr DynamicValue(DynamicValue&&)                 = default;
-    constexpr DynamicValue& operator=(const DynamicValue&) = delete;
-    constexpr DynamicValue& operator=(DynamicValue&&)      = default;
+    constexpr DynamicValue() noexcept : BaseType(DynamicElement{NULL_VALUE}) {};
+    constexpr DynamicValue(const DynamicValue&)                                                             = delete;
+    constexpr DynamicValue(DynamicValue&&) noexcept(std::is_nothrow_move_constructible_v<BaseType>)         = default;
+    constexpr DynamicValue& operator=(const DynamicValue&)                                                  = delete;
+    constexpr DynamicValue& operator=(DynamicValue&&) noexcept(std::is_nothrow_move_assignable_v<BaseType>) = default;
     template <typename T>
         requires(!std::is_reference_v<T> && traits::is_variant_alternative_v<DynamicVariant, T>)
-    constexpr explicit DynamicValue(T&& v) : BaseType(std::forward<T>(v)){};
+    constexpr explicit DynamicValue(T&& v) noexcept(std::is_nothrow_constructible_v<BaseType, T&&>)
+    : BaseType(std::forward<T>(v)){};
     template <typename T>
         requires(!std::is_reference_v<T> && traits::is_variant_alternative_v<DynamicVariant, T>)
-    constexpr DynamicValue& operator=(T&& v) {
+    constexpr DynamicValue& operator=(T&& v) noexcept(std::is_nothrow_assignable_v<BaseType, T&&>) {
         this->emplace<T>(std::forward<T>(v));
         return *this;
     }
     template <typename T>
         requires(requires(T&& v) { DynamicElement(std::forward<T>(v)); })
-    constexpr DynamicValue(T&& v) : BaseType(DynamicElement(std::forward<T>(v))){};
+    constexpr DynamicValue(T&& v) noexcept(std::is_nothrow_constructible_v<DynamicElement, T&&>)
+    : BaseType(DynamicElement(std::forward<T>(v))){};
     template <concepts::SupportToDynamic T>
         requires(!requires(T&& v) {
             DynamicElement(std::forward<T>(v));
@@ -70,16 +72,16 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
     // }
 
     template <ll::concepts::IsOneOf<AllElementTypes> T, class... Args>
-    LL_FORCEINLINE constexpr T& emplace(Args&&... val) {
+    LL_FORCEINLINE constexpr T& emplace(Args&&... val) noexcept(std::is_nothrow_constructible_v<T, Args&&...>) {
         return BaseType::emplace<DynamicElement>().template emplace<T>(std::forward<Args>(val)...);
     }
     template <ll::concepts::IsOneOf<DynamicElement, DynamicArray, DynamicObject> T, class... Args>
-    LL_FORCEINLINE constexpr T& emplace(Args&&... val) {
+    LL_FORCEINLINE constexpr T& emplace(Args&&... val) noexcept(std::is_nothrow_constructible_v<T, Args&&...>) {
         return BaseType::emplace<T>(std::forward<Args>(val)...);
     }
 
     [[nodiscard]] LL_FORCEINLINE static DynamicValue object() noexcept { return DynamicValue{DynamicObject{}}; }
-    [[nodiscard]] constexpr static DynamicValue array() noexcept { return DynamicValue{DynamicArray{}}; }
+    [[nodiscard]] constexpr static DynamicValue      array() noexcept { return DynamicValue{DynamicArray{}}; }
 
     template <IsAnyDynamicElement T>
     [[nodiscard]] LL_FORCEINLINE constexpr bool hold() const noexcept {
@@ -144,7 +146,7 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
         return fromDynamic(*this, out);
     }
     template <std::same_as<void> T>
-    [[nodiscard]] LL_CONSTEXPR23 ll::Expected<T> tryGet() {
+    [[nodiscard]] LL_CONSTEXPR23 ll::Expected<T> tryGet() noexcept {
         // if (!is_null()) return error_utils::makeFromDynamicTypeError<T, NullType>(*this);
         return {};
     }
