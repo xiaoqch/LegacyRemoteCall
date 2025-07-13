@@ -276,7 +276,7 @@ ll::coro::CoroTask<bool> testExtraType() {
         // assert(extra == ret); // CompoundTag* -> std::unique_ptr<CompoundTag>?
     }
     co_return true;
-};
+}
 
 [[maybe_unused]] static auto test =
     (testExtraType().launch(

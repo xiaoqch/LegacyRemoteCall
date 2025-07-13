@@ -79,12 +79,15 @@ struct JsonA {
     uchar        byte{};
     short        s{};
     unsigned int ui{};
-    // int64_t                              i64{};
-    float    f{};
-    double   d{};
-    EnumType e{};
-    // remote_call::NullType                null{};
-    std::string                              str;
+    int64_t      i64{};
+    float        f{};
+    double       d{};
+    EnumType     e{};
+#if _HAS_CXX23
+    remote_call::NullType null{};
+#endif
+    std::string str;
+
     std::vector<std::string>                 list;
     std::unordered_map<std::string, int>     record;
     ll::SmallDenseMap<ll::io::LogLevel, int> record2{};
@@ -97,12 +100,15 @@ struct JsonB {
     uchar        byte{};
     short        s{};
     unsigned int ui{};
-    // int64_t                              i64{};
-    float    f{};
-    double   d{};
-    EnumType e{};
-    // remote_call::NullType                null{};
-    std::string                              str;
+    int64_t      i64{};
+    float        f{};
+    double       d{};
+    EnumType     e{};
+#if _HAS_CXX23
+    remote_call::NullType null{};
+#endif
+    std::string str;
+
     std::vector<std::string>                 list;
     std::unordered_map<std::string, int>     record;
     ll::SmallDenseMap<ll::io::LogLevel, int> record2{};
@@ -120,9 +126,9 @@ struct JsonB {
 ll::coro::CoroTask<bool> testJsonType() {
     constexpr auto& ns = TEST_EXPORT_NAMESPACE;
 
-    auto const ori   = JsonB::random();
-    auto       value = remote_call::DynamicValue::from(ori).value();
-    auto       res   = value.tryGet<JsonB>().value();
+    static auto const ori   = JsonB::random();
+    auto              value = remote_call::DynamicValue::from(ori).value();
+    auto              res   = value.tryGet<JsonB>().value();
     assert(ori == res);
     auto json = ll::reflection::serialize<nlohmann::ordered_json>(res).value().dump();
 
@@ -166,11 +172,11 @@ JsonA JsonA::random() {
     b.byte = llRand::rand<uchar>();
     b.s    = llRand::rand<decltype(s)>();
     b.ui   = llRand::rand<decltype(ui)>();
-    // // b.i64  = llRand::rand<decltype(i64)>();
-    b.f = llRand::rand<decltype(f)>();
-    b.d = llRand::rand<decltype(d)>();
-    b.e = static_cast<EnumType>(llRand::rand<std::underlying_type_t<decltype(e)>>());
-    // b.null = detail::NULL_VALUE;
+    /// FIXME: int64_t changed
+    b.i64         = llRand::rand<int>();
+    b.f           = llRand::rand<decltype(f)>();
+    b.d           = llRand::rand<decltype(d)>();
+    b.e           = static_cast<EnumType>(llRand::rand<std::underlying_type_t<decltype(e)>>());
     b.str         = ll::string_utils::intToHexStr(llRand::rand<int>());
     auto listview = std::views::iota(0, llRand::rand<int>(5, 15))
                   | std::views::transform([](auto&&) { return ll::string_utils::intToHexStr(llRand::rand<int>()); });

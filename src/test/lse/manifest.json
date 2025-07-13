@@ -1,6 +1,6 @@
 {
-  "name": "lse-remote-call-test",
-  "entry": "dist/lse-remote-call-test.js",
+  "name": "lrc-lse-test",
+  "entry": "src/main.ts",
   "version": "0.0.1",
   "type": "lse-nodejs",
   "description": "RemoteCall test for LegacyScriptEngine",

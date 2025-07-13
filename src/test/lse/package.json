@@ -1,18 +1,19 @@
 {
-  "name": "lse-remote-call-test",
+  "name": "lrc-lse-test",
   "version": "0.0.1",
   "description": "",
-  "license": "ISC",
-  "author": "",
+  "author": "LiteLDev",
   "type": "module",
-  "main": "dist/lse-remote-call-test.js",
+  "main": "src/main.ts",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "deploy": "node --experimental-transform-types --disable-warning=ExperimentalWarning scripts/deploy.ts",
+    "test": "node --experimental-transform-types --disable-warning=ExperimentalWarning scripts/deploy.ts"
   },
-  "dependencies": {},
   "devDependencies": {
-    "@levimc-lse/types": "^2.14.1",
+    "@levimc-lse/types": "^2.17.0",
     "@types/node": "^22.15.17",
+    "prettier": "^3.6.2",
     "typescript": "^5.8.3"
   }
 }
