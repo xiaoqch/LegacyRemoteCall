@@ -31,9 +31,9 @@ auto testABI() {
     assert(hasFunc(ns, fmt::format("{}{}", name, 5)));
     assert(
         removeFuncs({
-            {ns, fmt::format("{}{}", name, 4)  },
-            {ns, fmt::format("{}{}", name, 115)},
-            {ns, fmt::format("{}{}", name, 5)  }
+            {std::string(ns), fmt::format("{}{}", name, 4)  },
+            {std::string(ns), fmt::format("{}{}", name, 115)},
+            {std::string(ns), fmt::format("{}{}", name, 5)  }
     })
         == 2
     );

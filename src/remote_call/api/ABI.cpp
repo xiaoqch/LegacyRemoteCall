@@ -17,7 +17,7 @@ struct ExportedFuncData {
     std::weak_ptr<ll::mod::Mod> provider;
     bool                        returnExpected;
     bool                        disabled = false;
-    // NOLINTNEXTLINE: google-explicit-constructor
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline operator FunctionRef() { return {callable, returnExpected, disabled, provider}; }
 };
 
@@ -60,7 +60,7 @@ ll::Expected<FunctionRef> exportFunc(
     std::string_view            funcName,
     CallbackFn&&                callback,
     bool                        returnExpected,
-    std::weak_ptr<ll::mod::Mod> mod // NOLINT: performance-unnecessary-value-param
+    std::weak_ptr<ll::mod::Mod> mod
 ) {
     [[maybe_unused]] static bool registered = registerOnModUnload();
     if (nameSpace.find("::") != std::string::npos) {

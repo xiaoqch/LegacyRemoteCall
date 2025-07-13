@@ -26,7 +26,7 @@ namespace remote_call {
  */
 template <typename Fn>
     requires(requires(Fn&& fn) { std::function(std::forward<Fn>(fn)); })
-[[nodiscard]] constexpr auto importAs(std::string const& nameSpace, std::string const& funcName) {
+[[nodiscard]] constexpr auto importAs(std::string_view nameSpace, std::string_view funcName) {
     using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
     return impl::importImpl(std::in_place_type<DecayedFn>, nameSpace, funcName);
 }
@@ -67,7 +67,7 @@ template <typename Fn, ll::FixedString nameSpace, ll::FixedString funcName>
  * @see remote_call::importAs
  */
 template <typename Ret>
-[[nodiscard]] constexpr auto importEx(std::string const& nameSpace, std::string const& funcName) {
+[[nodiscard]] constexpr auto importEx(std::string_view nameSpace, std::string_view funcName) {
     return impl::importExImpl<Ret>(nameSpace, funcName);
 }
 
@@ -106,7 +106,7 @@ template <typename Ret, ll::FixedString nameSpace, ll::FixedString funcName>
  */
 template <typename Fn, typename... DefaultArgs>
 inline ll::Expected<>
-exportAs(std::string const& nameSpace, std::string const& funcName, Fn&& callback, DefaultArgs&&... defaultArgs) {
+exportAs(std::string_view nameSpace, std::string_view funcName, Fn&& callback, DefaultArgs&&... defaultArgs) {
     using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
     return impl::exportImpl(
                std::in_place_type<DecayedFn>,
@@ -132,7 +132,7 @@ exportAs(std::string const& nameSpace, std::string const& funcName, Fn&& callbac
  * @see exportAs for simpler export scenarios.
  */
 template <typename Fn, typename FuncWrapper>
-inline ll::Expected<> exportEx(std::string const& nameSpace, std::string const& funcName, FuncWrapper&& callback) {
+inline ll::Expected<> exportEx(std::string_view nameSpace, std::string_view funcName, FuncWrapper&& callback) {
     using DecayedFn = traits::function_traits<decltype(std::function(std::declval<Fn>()))>::function_type;
     return impl::exportExImpl(std::in_place_type<DecayedFn>, nameSpace, funcName, std::forward<FuncWrapper>(callback))
         .transform([](auto&&) {});

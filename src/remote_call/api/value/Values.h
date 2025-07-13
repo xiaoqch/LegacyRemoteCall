@@ -13,7 +13,7 @@ class BlockActor;
 class Container;
 
 namespace remote_call {
-// NOLINTBEGIN: google-explicit-constructor
+// NOLINTBEGIN(google-explicit-constructor)
 
 template <class T>
     requires(std::destructible<T>)
@@ -24,8 +24,10 @@ struct MayUniquePtr {
     constexpr MayUniquePtr(const MayUniquePtr&) = delete;
     constexpr MayUniquePtr(MayUniquePtr&& o) noexcept : ptr(o.ptr), own(o.own) { o.own = false; };
     constexpr MayUniquePtr& operator=(const MayUniquePtr&) = delete;
-    constexpr MayUniquePtr& operator=(MayUniquePtr&& o) {
-        if (own && ptr) delete ptr;
+    constexpr MayUniquePtr& operator=(MayUniquePtr&& o) noexcept {
+        try {
+            if (own && ptr) delete ptr;
+        } catch (...) {}
         ptr   = o.ptr;
         own   = o.own;
         o.own = false;
@@ -48,7 +50,8 @@ struct MayUniquePtr {
         return std::unique_ptr<T>(const_cast<T*>(ptr));
     }
     template <typename RTN = T const*>
-    [[nodiscard]] constexpr RTN get() = delete;
+    [[nodiscard]] constexpr RTN get() noexcept = delete;
+
     template <>
     [[nodiscard]] constexpr T const* get() noexcept {
         return ptr;
@@ -58,6 +61,7 @@ struct MayUniquePtr {
         return const_cast<T*>(ptr);
     };
     template <>
+    // NOLINTNEXTLINE
     [[nodiscard]] constexpr std::unique_ptr<T> get() noexcept(noexcept(tryGetUniquePtr())) {
         return tryGetUniquePtr();
     };
@@ -73,7 +77,7 @@ struct BlockType {
 
     constexpr BlockType(Block const* ptr) noexcept : block(ptr) {};
     template <typename RTN>
-    [[nodiscard]] constexpr RTN get() const = delete;
+    [[nodiscard]] constexpr RTN get() const noexcept = delete;
     template <>
     [[nodiscard]] constexpr Block const* get() const noexcept {
         return block;
@@ -166,5 +170,5 @@ struct BlockPosType {
     };
 };
 
-// NOLINTEND: google-explicit-constructor
+// NOLINTEND(google-explicit-constructor)
 } // namespace remote_call

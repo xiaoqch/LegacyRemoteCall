@@ -417,11 +417,11 @@ template <typename RTN, typename... Args>
 inline bool
 _exportAs(std::string const& nameSpace, std::string const& funcName, std::function<RTN(Args...)>&& callback) {
     CallbackFn cb = [callback = std::move(callback)](std::vector<ValueType> args) -> ValueType {
-        if (sizeof...(Args) != args.size()) return std::move(ValueType());
+        if (sizeof...(Args) != args.size()) return ValueType();
         int index = sizeof...(Args);
         if constexpr (std::is_void_v<RTN>) {
             callback(extract<Args>(_expandArg(args, index))...);
-            return std::move(ValueType());
+            return ValueType();
         } else {
             return pack(callback(extract<Args>(_expandArg(args, index))...));
         }
@@ -450,16 +450,17 @@ inline bool _importAs(std::string const& nameSpace, std::string const& funcName,
     return true;
 }
 
-template <typename CB, typename Func = std::conditional_t<std::is_function_v<CB>, std::function<CB>, CB>>
-inline Func importAs(std::string const& nameSpace, std::string const& funcName) {
+template <typename CB>
+inline auto importAs(std::string const& nameSpace, std::string const& funcName) {
+    using Func = decltype(std::function(std::declval<CB>()));
     Func callback{};
     _importAs(nameSpace, funcName, callback);
-    return std::move(callback);
+    return callback;
 }
 
 template <typename CB>
 inline bool exportAs(std::string const& nameSpace, std::string const& funcName, CB&& callback) {
-    return _exportAs(nameSpace, funcName, std::function(std::move(callback)));
+    return _exportAs(nameSpace, funcName, std::function(std::forward<CB>(callback)));
 }
 
 } // namespace RemoteCall

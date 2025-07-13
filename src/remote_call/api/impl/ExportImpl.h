@@ -220,16 +220,17 @@ template <typename Fn, typename Ret, typename... Args, typename... DefaultArgs>
     requires(std::invocable<Fn, Args...>)
 [[nodiscard]] inline ll::Expected<FunctionRef> exportImpl(
     std::in_place_type_t<Ret(Args...)>,
-    std::string const& nameSpace,
-    std::string const& funcName,
-    Fn&&               callback,
+    std::string_view nameSpace,
+    std::string_view funcName,
+    Fn&&             callback,
     DefaultArgs&&... defaultArgs
 ) {
     void((checkUptrType<Args>(), ...));
-    CallbackFn rawFunc = [callback = std::forward<decltype(callback)>(callback),
-                          defArgs  = std::make_tuple(std::forward<DefaultArgs>(defaultArgs)...),
-                          nameSpace,
-                          funcName](std::vector<DynamicValue>&& args) mutable -> ll::Expected<DynamicValue> {
+    CallbackFn rawFunc = [callback  = std::forward<decltype(callback)>(callback),
+                          defArgs   = std::make_tuple(std::forward<DefaultArgs>(defaultArgs)...),
+                          nameSpace = std::string{nameSpace},
+                          funcName  = std::string{funcName}](std::vector<DynamicValue>&& args
+                         ) mutable -> ll::Expected<DynamicValue> {
         // args: int, optional<int>, int = 2
         // RequiredArgsCount = 2, NonOptionalArgsCount = 1
         constexpr size_t ArgsCount            = sizeof...(Args);
@@ -255,16 +256,12 @@ template <typename Fn, typename Ret, typename... Args, typename... DefaultArgs>
 
 template <typename Fn, typename Ret, typename... Args>
     requires(std::invocable<Fn, Args...>)
-[[nodiscard]] inline ll::Expected<FunctionRef> exportExImpl(
-    std::in_place_type_t<Ret(Args...)>,
-    std::string const& nameSpace,
-    std::string const& funcName,
-    Fn&&               callback
-) {
+[[nodiscard]] inline ll::Expected<FunctionRef>
+exportExImpl(std::in_place_type_t<Ret(Args...)>, std::string_view nameSpace, std::string_view funcName, Fn&& callback) {
     void((checkUptrType<Args>(), ...));
     CallbackFn rawFunc = [callback = std::forward<decltype(callback)>(callback),
-                          nameSpace,
-                          funcName](std::vector<DynamicValue>&& args) mutable -> ll::Expected<DynamicValue> {
+                          nameSpace = std::string{nameSpace},
+                          funcName  = std::string{funcName}](std::vector<DynamicValue>&& args) mutable -> ll::Expected<DynamicValue> {
         constexpr size_t                  ArgsCount            = sizeof...(Args);
         constexpr size_t                  RequiredArgsCount    = getRequiredArgsCount<Args...>(std::in_place_type<Fn>);
         constexpr size_t                  NonOptionalArgsCount = getNonOptionalArgsCount<RequiredArgsCount, Args...>();

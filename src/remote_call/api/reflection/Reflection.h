@@ -11,7 +11,7 @@ constexpr void forEachMember(T&& value, F&& func) {
         if constexpr (std::is_rvalue_reference_v<T&&>)
             func(
                 ll::reflection::member_name_array_v<T>[idx],
-                std::move(field) // NOLINT: bugprone-move-forwarding-reference
+                std::move(field) // NOLINT(bugprone-move-forwarding-reference)
             );
         else func(ll::reflection::member_name_array_v<T>[idx], std::forward<decltype(field)>(field));
     });

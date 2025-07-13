@@ -4,11 +4,13 @@
 #include "ll/api/io/LoggerRegistry.h"
 #include "ll/api/utils/StringUtils.h"
 #include "mc/util/ColorFormat.h"
+#include "remote_call/api/API.h" // IWYU pragma: keep
+
 
 namespace remote_call::test {
 
-inline constexpr std::string      TEST_EXPORT_NAMESPACE = "RemoteCallTest";
-inline constexpr std::string_view LSE_TEST_MODE_NAME    = "lse-remote-call-test";
+inline constexpr std::string_view TEST_EXPORT_NAMESPACE = "RemoteCallTest";
+inline constexpr std::string_view LSE_TEST_MOD_NAME     = "lse-remote-call-test";
 // constexpr auto SUCCESS_PREFIX =fmt::styled("",fmt::fg(fmt::terminal_color::green));
 inline auto& getLogger() {
     static auto logger = [] {

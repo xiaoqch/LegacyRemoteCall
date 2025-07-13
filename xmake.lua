@@ -36,7 +36,10 @@ target("LegacyRemoteCall")
     set_kind("shared")
     set_languages("c++20")
     set_symbols("debug")
-    add_files("src/remote_call/**.cpp")
+    add_files(
+        "src/remote_call/api/**.cpp",
+        "src/remote_call/core/**.cpp"
+    )
     add_includedirs("src")
     add_headerfiles("src/(remote_call/api/**.h)")
     if has_config("test") then

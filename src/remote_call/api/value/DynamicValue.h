@@ -11,7 +11,7 @@
 
 
 namespace remote_call {
-// NOLINTBEGIN: google-explicit-constructor
+// NOLINTBEGIN(google-explicit-constructor)
 
 namespace error_utils {
 template <typename Target, typename... Expected>
@@ -118,7 +118,9 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
             return {};
         } else {
             if constexpr (concepts::SupportFromDynamicC<T>) {
-                return fromDynamic(*this, std::in_place_type<T>).and_then([&](auto&& v) { out = std::move(v); });
+                return fromDynamic(*this, std::in_place_type<T>).and_then([&](auto&& v) {
+                    out = std::move(v); // NOLINT(bugprone-move-forwarding-reference)
+                });
             } else {
                 return fromDynamic(*this, out);
             }
@@ -294,5 +296,5 @@ struct DynamicValue : public detail::DynamicBase<DynamicVariant> {
     [[nodiscard]] constexpr operator std::string_view() const { return get<std::string>(); };
 };
 
-// NOLINTEND: google-explicit-constructor
+// NOLINTEND(google-explicit-constructor)
 } // namespace remote_call

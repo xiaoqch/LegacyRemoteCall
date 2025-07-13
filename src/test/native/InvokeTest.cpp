@@ -73,7 +73,7 @@ struct AnotherRoot {
 
 
 static_assert(ll::reflection::Reflectable<Str>);
-// NOLINTBEGIN: bugprone-assert-side-effect, performance-unnecessary-value-param
+// NOLINTBEGIN(bugprone-assert-side-effect, performance-unnecessary-value-param)
 
 std::tuple<Str, Str, Str> testFunc(Str a1, Str const& a2, Str&& a3) { return std::tuple{a1, a2, a3}; }
 bool                      testInvocation() {
@@ -296,7 +296,7 @@ bool                      testInvocation() {
     }
     return true;
 }
-// NOLINTEND
+// NOLINTEND(bugprone-assert-side-effect, performance-unnecessary-value-param)
 
 [[maybe_unused]] static auto test = ll::thread::ServerThreadExecutor::getDefault().executeAfter(
     [] {

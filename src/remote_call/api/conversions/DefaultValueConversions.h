@@ -59,7 +59,7 @@ template <concepts::IsString T>
     requires(!concepts::IsValueElement<T>)
 inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::LowTag) {
     if (dv.hold<std::string>()) [[likely]] {
-        t = std::forward<DynamicValue>(dv).get<std::string>();
+        t = dv.get<std::string>();
         return {};
     } else {
         return error_utils::makeFromDynamicTypeError<T, std::string>(dv);
@@ -178,8 +178,8 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& t, priority::HightTag) {
 // std::tuple<BlockPos,int>, std::pair<Vec3,int>
 template <concepts::IsTupleLike Pos>
     requires(std::tuple_size<std::decay_t<Pos>>::value == 2 &&requires(Pos pos) {
-        { std::get<0>(pos) } -> concepts::IsPos;
-        { std::get<1>(pos) } -> std::convertible_to<int>;
+    { std::get<0>(pos) } -> concepts::IsPos;
+    { std::get<1>(pos) } -> std::convertible_to<int>;
     } )
 inline ll::Expected<> toDynamic(DynamicValue& dv, Pos&& t, priority::DefaultTag) noexcept {
     using PosType    = std::decay_t<decltype(std::get<0>(std::forward<Pos>(t)))>;
@@ -189,8 +189,8 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, Pos&& t, priority::DefaultTag)
 }
 template <typename Pos>
     requires(std::tuple_size<std::decay_t<Pos>>::value == 2 && requires(Pos pos) {
-        { std::get<0>(pos) } -> concepts::IsPos;
-        { std::get<1>(pos) } -> std::convertible_to<int>;
+    { std::get<0>(pos) } -> concepts::IsPos;
+    { std::get<1>(pos) } -> std::convertible_to<int>;
     } )
 inline ll::Expected<> fromDynamic(DynamicValue& dv, Pos& t, priority::DefaultTag) {
     using PosType = std::decay_t<decltype(std::get<0>(std::forward<Pos>(t)))>;

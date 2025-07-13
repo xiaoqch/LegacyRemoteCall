@@ -57,10 +57,10 @@ importCallImpl(std::string const& nameSpace, std::string const& funcName, Args&&
 
 template <typename Ret, typename... Args>
 [[nodiscard]] constexpr auto
-importImpl(std::in_place_type_t<Ret(Args...)>, std::string const& nameSpace, std::string const& funcName) {
+importImpl(std::in_place_type_t<Ret(Args...)>, std::string_view nameSpace, std::string_view funcName) {
     checkUptrType<Ret>();
     using ExpectedRet = corrected_return<Ret>::Excepted;
-    return [nameSpace, funcName](Args... args) -> ExpectedRet {
+    return [nameSpace = std::string{nameSpace}, funcName = std::string{funcName}](Args... args) -> ExpectedRet {
         return importCallImpl<Ret>(nameSpace, funcName, std::forward<decltype(args)>(args)...);
     };
 }
@@ -75,10 +75,10 @@ template <ll::FixedString nameSpace, ll::FixedString funcName, typename Ret, typ
 }
 
 template <typename Ret>
-[[nodiscard]] constexpr auto importExImpl(std::string const& nameSpace, std::string const& funcName) {
+[[nodiscard]] constexpr auto importExImpl(std::string_view nameSpace, std::string_view funcName) {
     checkUptrType<Ret>();
     using ExpectedRet = corrected_return<Ret>::Excepted;
-    return [nameSpace, funcName](auto&&... args) -> ExpectedRet {
+    return [nameSpace = std::string{nameSpace}, funcName = std::string{funcName}](auto&&... args) -> ExpectedRet {
         return importCallImpl<Ret>(nameSpace, funcName, std::forward<decltype(args)>(args)...);
     };
 }

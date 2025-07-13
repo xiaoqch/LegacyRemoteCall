@@ -229,7 +229,7 @@ inline bool executeCommand(SimulatedPlayer& sp, std::string const& command) {
 
 ll::coro::CoroTask<bool> testExtraType() {
     assert(testRandomExtraType());
-    auto sp = SimulatedPlayer::create(ns, {0, 77, 0});
+    auto sp = SimulatedPlayer::create(std::string(ns), {0, 77, 0});
     if (!sp) throw std::runtime_error("Failed to create simulated player");
     co_await ll::chrono::ticks{40};
     while (!sp->mLocalPlayerInitialized) {
@@ -285,7 +285,7 @@ ll::coro::CoroTask<bool> testExtraType() {
              if (result) test::success("ExtraType Test passed");
              else result.error().log(getLogger());
              ((MinecraftGameTestHelper*)nullptr)
-                 ->$removeSimulatedPlayer(*(SimulatedPlayer*)ll::service::getLevel()->getPlayer(ns));
+                 ->$removeSimulatedPlayer(*(SimulatedPlayer*)ll::service::getLevel()->getPlayer(std::string(ns)));
          }
      ),
      true);

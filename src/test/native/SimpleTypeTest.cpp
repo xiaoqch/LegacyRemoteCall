@@ -137,7 +137,7 @@ ll::coro::CoroTask<bool> testJsonType() {
     assert(reflection::isEqual(res, forwarded));
 
     co_await ll::chrono::ticks{1};
-    if (ll::mod::ModManagerRegistry::getInstance().hasMod(LSE_TEST_MODE_NAME)) {
+    if (ll::mod::ModManagerRegistry::getInstance().hasMod(LSE_TEST_MOD_NAME)) {
         auto deadline = ll::chrono::GameTickClock::now() + ll::chrono::ticks{100};
         while (!remote_call::hasFunc(ns, "lseCompareJson")) {
             if (ll::chrono::GameTickClock::now() > deadline) break;
@@ -146,7 +146,7 @@ ll::coro::CoroTask<bool> testJsonType() {
         auto const lseCompareJson = remote_call::importAs<bool(JsonB, std::string&&)>(ns, "lseCompareJson");
         lseCompareJson(ori, std::move(json)).value();
     } else {
-        getLogger().warn("Test for LSE not start, mod <{}> not exists", LSE_TEST_MODE_NAME);
+        getLogger().warn("Test for LSE not start, mod <{}> not exists", LSE_TEST_MOD_NAME);
     }
     co_return true;
 }

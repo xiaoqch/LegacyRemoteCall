@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Added support for reflection
 - Added support for custom conversion
+- Added remote_call::importEx and remote_call::exportEx
+- Added support for optional and default arguments
 
 ### Changed
 
