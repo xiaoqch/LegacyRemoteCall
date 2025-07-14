@@ -77,6 +77,11 @@ concept IsTupleLike = requires(T&& t) {
     }(std::forward<T>(t), std::make_index_sequence<std::tuple_size<std::decay_t<T>>::value>{});
 };
 
+template <typename T>
+concept IsPartialOptional = requires(T v) {
+    { v.$RemoteCallPartial } -> std::assignable_from<bool>;
+};
+
 static_assert(IsTupleLike<std::pair<int, int>&>);
 static_assert(IsTupleLike<std::tuple<std::unique_ptr<int>>>);
 static_assert(IsTupleLike<std::tuple<>&&>);

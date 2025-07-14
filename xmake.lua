@@ -70,7 +70,7 @@ target("LegacyRemoteCall")
         copy_headers(path.join(os.projectdir(), "src","remote_call", "api") , includedir)
         os.cp(path.join(target:targetdir(), target:name() .. ".lib"), libdir)
         if has_config("test") then
-            -- local lsetestdir = path.join(bindir, "lse-remote-call-test/")
+            -- local lsetestdir = path.join(bindir, "lrc-lse-test/")
             -- os.mkdir(lsetestdir)
             -- os.cp(path.join(os.projectdir(), "src", "test", "lse", "package*.json"), lsetestdir)
             -- os.cp(path.join(os.projectdir(), "src", "test", "lse", "manifest.json"), lsetestdir)

@@ -96,8 +96,11 @@ ll::Expected<Tpl> fromDynamicTupleWithDefaultImpl(
                 res = error_utils::makeSerIndexError(Idx, res.error());
             return opt;
         } else {
-            constexpr size_t Req = sizeof...(I) - sizeof...(DefaultArgs);
-            if constexpr (Idx >= Req) {
+            constexpr bool   isPartialOptional = concepts::IsPartialOptional<Element>;
+            constexpr size_t Req               = sizeof...(I) - sizeof...(DefaultArgs);
+            if constexpr (isPartialOptional) {
+                return Element{.$RemoteCallPartial = true};
+            } else if constexpr (Idx >= Req) {
                 return std::get<Idx - Req>(defArgs);
             } else if constexpr (ll::concepts::IsOptional<Element>) {
                 return std::make_optional<Element>(std::nullopt);
@@ -259,9 +262,10 @@ template <typename Fn, typename Ret, typename... Args>
 [[nodiscard]] inline ll::Expected<FunctionRef>
 exportExImpl(std::in_place_type_t<Ret(Args...)>, std::string_view nameSpace, std::string_view funcName, Fn&& callback) {
     void((checkUptrType<Args>(), ...));
-    CallbackFn rawFunc = [callback = std::forward<decltype(callback)>(callback),
+    CallbackFn rawFunc = [callback  = std::forward<decltype(callback)>(callback),
                           nameSpace = std::string{nameSpace},
-                          funcName  = std::string{funcName}](std::vector<DynamicValue>&& args) mutable -> ll::Expected<DynamicValue> {
+                          funcName  = std::string{funcName}](std::vector<DynamicValue>&& args
+                         ) mutable -> ll::Expected<DynamicValue> {
         constexpr size_t                  ArgsCount            = sizeof...(Args);
         constexpr size_t                  RequiredArgsCount    = getRequiredArgsCount<Args...>(std::in_place_type<Fn>);
         constexpr size_t                  NonOptionalArgsCount = getNonOptionalArgsCount<RequiredArgsCount, Args...>();

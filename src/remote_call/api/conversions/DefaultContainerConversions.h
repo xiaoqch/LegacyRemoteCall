@@ -313,8 +313,16 @@ inline ll::Expected<> toDynamic(DynamicValue& dv, T&& obj, ll::meta::PriorityTag
 template <ll::reflection::Reflectable T>
     requires(std::is_default_constructible_v<T>)
 inline ll::Expected<> fromDynamic(DynamicValue& dv, T& obj, ll::meta::PriorityTag<1>) {
-    if (!dv.is_object()) return error_utils::makeFromDynamicTypeError<T, DynamicObject>(dv);
     ll::Expected<> res;
+    constexpr bool isPartialOptional = concepts::IsPartialOptional<T>;
+    if constexpr (isPartialOptional) {
+        if (dv.is_null()) {
+            obj.$RemoteCallPartial = true;
+            return res;
+        }
+        obj.$RemoteCallPartial = false;
+    }
+    if (!dv.is_object()) return error_utils::makeFromDynamicTypeError<T, DynamicObject>(dv);
     reflection::forEachMember(obj, [&](std::string_view name, auto& member) {
         if (name.starts_with('$') || !res) {
             return;
@@ -333,13 +341,15 @@ inline ll::Expected<> fromDynamic(DynamicValue& dv, T& obj, ll::meta::PriorityTa
                 static_assert(ll::traits::always_false<member_type>, "this type can't deserialize");
             }
         } else {
-            if constexpr (!ll::concepts::IsOptional<member_type>) {
+            if constexpr (isPartialOptional) {
+                obj.$RemoteCallPartial = true;
+            } else if constexpr (ll::concepts::IsOptional<member_type> || std::same_as<member_type, NullType>) {
+                member = member_type{};
+            } else {
                 res = error_utils::makeError(
                     error_utils::ErrorReason::KeyNotFound,
                     fmt::format("missing required field \"{}\" when deserializing", sname)
                 );
-            } else {
-                member = std::nullopt;
             }
         }
     });
