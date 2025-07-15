@@ -21,6 +21,10 @@ jobs:
 
       - uses: xmake-io/github-action-setup-xmake@v1
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - uses: actions/cache@v4
         with:
           path: |
@@ -37,6 +41,10 @@ jobs:
 
       - run: |
           xmake -v -y
+
+      - run: |
+          npm --prefix=src/test/lse run deploy
+        if: matrix.test == true
 
       - uses: actions/upload-artifact@v4
         with:

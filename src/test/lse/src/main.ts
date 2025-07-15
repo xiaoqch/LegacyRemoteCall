@@ -3,6 +3,7 @@ import "./example.ts";
 
 import { describe } from "node:test";
 import testSimple from "./tests/simple-test.ts";
+import testPartial from "./tests/partial-test.ts";
 import testExtra from "./tests/extra-test.ts";
 
 mc.listen("onServerStarted", async () => {
@@ -12,6 +13,7 @@ mc.listen("onServerStarted", async () => {
   const timer = setInterval(() => {}, timeout * 10);
   describe("remote-call", { timeout }, () => {
     testSimple();
+    testPartial();
     testExtra();
   }).finally(() => clearInterval(timer));
 });

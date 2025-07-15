@@ -5,9 +5,13 @@
   "author": "LiteLDev",
   "type": "module",
   "main": "src/main.ts",
+  "files": [
+    "src/",
+    "manifest.json"
+  ],
   "scripts": {
     "build": "tsc",
-    "deploy": "node --experimental-transform-types --disable-warning=ExperimentalWarning scripts/deploy.ts",
+    "deploy": "npm pack --json | node --experimental-transform-types --disable-warning=ExperimentalWarning scripts/deploy.ts --copy",
     "test": "node --experimental-transform-types --disable-warning=ExperimentalWarning scripts/deploy.ts"
   },
   "devDependencies": {

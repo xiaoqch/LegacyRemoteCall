@@ -26,8 +26,8 @@ declare global {
   }
 }
 
-class RecipesApi {
-  static addShapeRecipe = ll.imports("RecipesApi", "addShapeRecipe");
+namespace RecipesApi {
+  export const addShapeRecipe = ll.imports("RecipesApi", "addShapeRecipe");
 }
 setTimeout(() => {
   logger.info("Registering recipe custom:lse_recipe");
